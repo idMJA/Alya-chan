@@ -1,0 +1,21 @@
+[package]
+name = "alya-chan"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+twilight-gateway = "0.17.1"
+twilight-http = "0.17.1"
+twilight-model = "0.17.1"
+twilight-cache-inmemory = "0.17.1"
+twilight-util = { version = "0.17.0", features = ["builder"] }
+twilight-standby = "0.17.0"
+anyhow = "1"
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dotenv = "0.15"
+chrono = "0.4"
