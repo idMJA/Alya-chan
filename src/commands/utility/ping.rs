@@ -20,7 +20,7 @@ impl SlashCommand for PingCommand {
     async fn execute(&self, ctx: &SlashCommandContext) -> BotResult<()> {
         ctx.bot
             .http
-            .interaction(ctx.interaction_id.cast())
+            .interaction(ctx.application_id.cast())
             .create_response(
                 ctx.interaction_id.cast(),
                 &ctx.token,

@@ -1,0 +1,15 @@
+# Example config for Alya-chan
+# Color can be provided as an integer (decimal or 0xHEX) or as a hex string.
+
+# Examples:
+# color = 0x5865f2
+# color = "#5865f2"
+# color = "5865f2"
+
+[color] 
+primary = "#5865f2"
+no = "#ff0000"
+
+[info]
+# Banner image shown on the help menu
+banner = "https://i.ibb.co/hrpKCdy/e1da98e96fdfc12635909f99725d971e.png"

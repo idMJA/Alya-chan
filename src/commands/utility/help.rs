@@ -1,9 +1,12 @@
 use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
 use std::sync::Arc;
+use twilight_model::channel::message::component::{
+    ActionRow, Component, SelectMenu, SelectMenuOption, SelectMenuType,
+};
 use twilight_model::http::interaction::{InteractionResponse, InteractionResponseType};
 use twilight_model::util::Timestamp;
-use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder};
+use twilight_util::builder::embed::{EmbedBuilder, ImageSource};
 
 pub struct HelpCommand {
     command_manager: Option<Arc<crate::handlers::CommandManager>>,
@@ -35,7 +38,7 @@ impl SlashCommand for HelpCommand {
     async fn execute(&self, ctx: &SlashCommandContext) -> BotResult<()> {
         ctx.bot
             .http
-            .interaction(ctx.interaction_id.cast())
+            .interaction(ctx.application_id.cast())
             .create_response(
                 ctx.interaction_id.cast(),
                 &ctx.token,
@@ -46,60 +49,94 @@ impl SlashCommand for HelpCommand {
             )
             .await?;
 
-        let mut embeds = Vec::new();
-
         if let Some(manager) = &self.command_manager {
             let categories = manager.get_all_categories();
 
-            if categories.is_empty() {
-                let embed = EmbedBuilder::new()
-                    .title("Alya-chan Help Menu")
-                    .description("No commands registered yet!")
-                    .color(0x9b59b6)
-                    .build();
-                embeds.push(embed);
-            } else {
-                for category in categories {
-                    let commands = manager.get_commands_by_category(category);
+            // author mention
+            let author_mention = ctx
+                .author_id
+                .as_ref()
+                .map(|id| format!("<@{}>", id))
+                .unwrap_or_else(|| String::from("<@unknown>"));
 
-                    if commands.is_empty() {
-                        continue;
-                    }
+            // Main embed following the user's requested text
+            let mut main = EmbedBuilder::new()
+                .color(ctx.bot.config.color.primary)
+                .title("Alya-chan Help Center")
+                .description(format!("**Konnichiwa! {}, I'm Alya-chan**\n\n**A multifunctional Discord bot inspired by your favorite anime characters. With powerful features, Alya-chan is not only ready to accompany you to play, but also help you manage your Discord server more effectively. Equipped with various moderation, entertainment, and utility features, and more. Alya-chan is a loyal friend who is ready to help anytime!**", author_mention))
+                .field(twilight_util::builder::embed::EmbedFieldBuilder::new("\u{200B}", "\u{200B}"))
+                // Replace static features with dynamic categories and emoji
+                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                    "Categories",
+                    &categories
+                        .iter()
+                        .map(|c| {
+                            let emoji = match *c {
+                                "configurations" => &ctx.bot.config.emoji.pencil,
+                                "informations" => &ctx.bot.config.emoji.info,
+                                "music" => &ctx.bot.config.emoji.music,
+                                "filters" => &ctx.bot.config.emoji.list,
+                                "playlists" => &ctx.bot.config.emoji.folder,
+                                "reports" => &ctx.bot.config.emoji.warn,
+                                _ => &ctx.bot.config.emoji.question,
+                            };
 
-                    let mut fields = Vec::new();
-                    for cmd in commands {
-                        let metadata = cmd.metadata();
-                        let field_value = format!("`/{}`\n{}", metadata.name, metadata.description);
-                        fields.push(EmbedFieldBuilder::new(&metadata.name, field_value));
-                    }
+                            format!("{} : **{}**", emoji, capitalize_first(c))
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ))
+                .timestamp(Timestamp::from_secs(chrono::Utc::now().timestamp()).unwrap());
 
-                    let mut embed_builder = EmbedBuilder::new()
-                        .title(format!("📚 {} Commands", capitalize_first(category)))
-                        .color(0x9b59b6);
+            // banner is required and validated during config load
+            let banner = &ctx.bot.config.info.banner;
+            main = main.image(ImageSource::url(banner).expect("banner validated at startup"));
 
-                    for field in fields {
-                        embed_builder = embed_builder.field(field);
-                    }
+            main = main.footer(twilight_util::builder::embed::EmbedFooterBuilder::new(
+                "Thanks for choosing Alya-chan!",
+            ));
 
-                    embeds.push(embed_builder.build());
-                }
+            let main_embed = main.build();
 
-                let footer_embed = EmbedBuilder::new()
-                    .title("💜 Alya-chan")
-                    .description("Discord multipurpose bot made with Twilight\n\nUse `/` followed by command name to execute commands")
-                    .color(0x9b59b6)
-                    .timestamp(Timestamp::from_secs(chrono::Utc::now().timestamp()).unwrap())
-                    .build();
-                embeds.push(footer_embed);
-            }
+            // Build select menu options
+            let options = categories
+                .into_iter()
+                .map(|c| SelectMenuOption {
+                    default: false,
+                    emoji: None,
+                    description: None,
+                    label: capitalize_first(c),
+                    value: c.to_string(),
+                })
+                .collect::<Vec<_>>();
+
+            let select = SelectMenu {
+                id: None,
+                channel_types: None,
+                custom_id: "guild-helpMenu".to_string(),
+                default_values: None,
+                disabled: false,
+                kind: SelectMenuType::Text,
+                max_values: Some(1),
+                min_values: Some(1),
+                options: Some(options),
+                placeholder: Some("Select a category".to_string()),
+                required: None,
+            };
+
+            let components = vec![Component::ActionRow(ActionRow {
+                id: None,
+                components: vec![Component::SelectMenu(select)],
+            })];
+
+            ctx.bot
+                .http
+                .interaction(ctx.application_id.cast())
+                .create_followup(&ctx.token)
+                .embeds(&[main_embed])
+                .components(&components)
+                .await?;
         }
-
-        ctx.bot
-            .http
-            .interaction(ctx.interaction_id.cast())
-            .create_followup(&ctx.token)
-            .embeds(if embeds.is_empty() { &[] } else { &embeds })
-            .await?;
 
         Ok(())
     }

@@ -44,6 +44,31 @@ src/
    cargo run
    ```
 
+Optional configuration
+----------------------
+Required configuration
+----------------------
+
+A `config.toml` file in the project root is required and must contain the following required keys:
+
+- `[color].primary` (hex or number)
+- `[info].banner` (valid http(s) URL)
+- `[emoji]` section with required keys: `pencil`, `info`, `music`, `list`, `folder`, `warn`, `question` (see `emoji.toml` example)
+
+If any of the above are missing or invalid, the application will refuse to start and print an error message explaining which keys are missing or invalid.
+
+Example `config.toml` minimum:
+
+```toml
+[color]
+primary = "#5865f2"
+
+[info]
+banner = "https://i.ibb.co/hrpKCdy/e1da98e96fdfc12635909f99725d971e.png"
+```
+
+You should also provide `emoji.toml` (recommended) or the `[emoji]` table inside `config.toml` with the required emoji keys.
+
 ## Menambahkan Command Baru
 
 Buat file baru di `src/commands/`, contoh `src/commands/say.rs`:

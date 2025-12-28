@@ -1,6 +1,7 @@
 [package]
 name = "alya-chan"
 version = "0.1.0"
+authors = ["Kiyomi Fujiwara <kiyomi@mjba.my>"]
 edition = "2021"
 
 [dependencies]
@@ -15,7 +16,11 @@ anyhow = "1"
 async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+toml = "0.7"
 tracing = "0.1"
+url = "2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenv = "0.15"
 chrono = "0.4"
+twilight-validate = "0.17.0"
+rustls = "0.23.35"

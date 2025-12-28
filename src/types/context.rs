@@ -1,3 +1,4 @@
+use crate::config::Config;
 use std::sync::Arc;
 use twilight_cache_inmemory::InMemoryCache;
 use twilight_http::Client as HttpClient;
@@ -12,14 +13,22 @@ pub struct BotContext {
     pub cache: Arc<InMemoryCache>,
     #[allow(dead_code)]
     pub standby: Arc<Standby>,
+    #[allow(dead_code)]
+    pub config: Arc<Config>,
 }
 
 impl BotContext {
-    pub fn new(http: Arc<HttpClient>, cache: Arc<InMemoryCache>, standby: Arc<Standby>) -> Self {
+    pub fn new(
+        http: Arc<HttpClient>,
+        cache: Arc<InMemoryCache>,
+        standby: Arc<Standby>,
+        config: Arc<Config>,
+    ) -> Self {
         Self {
             http,
             cache,
             standby,
+            config,
         }
     }
 }

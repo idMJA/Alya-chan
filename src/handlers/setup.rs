@@ -31,7 +31,17 @@ impl HandlersSetup {
         let evt_mgr = Arc::new(evt_mgr);
 
         // Setup component manager
-        let comp_mgr = Arc::new(ComponentManager::new());
+        let mut comp_manager = ComponentManager::new();
+
+        // Register component handlers
+        comp_manager.register(Arc::new(
+            crate::components::select_menus::help_menu::HelpMenuSelect::new(Arc::clone(&cmd_mgr)),
+        ));
+        comp_manager.register(Arc::new(
+            crate::components::buttons::paginator::PaginatorButton::new(Arc::clone(&cmd_mgr)),
+        ));
+
+        let comp_mgr = Arc::new(comp_manager);
 
         Self {
             command_manager: cmd_mgr,

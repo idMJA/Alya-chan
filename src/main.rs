@@ -1,5 +1,6 @@
 mod commands;
 mod components;
+mod config;
 mod events;
 mod handlers;
 mod types;
@@ -14,6 +15,7 @@ use twilight_gateway::{Event, EventTypeFlags, Shard, ShardId, StreamExt};
 use twilight_http::Client as HttpClient;
 use twilight_standby::Standby;
 
+use crate::config::Config;
 use handlers::{get_default_intents, HandlersSetup};
 use types::BotContext;
 use types::SlashCommand;
@@ -25,6 +27,8 @@ async fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
     init_logger();
+
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
     tracing::info!("Starting Alya-chan Discord Bot...");
 
@@ -40,7 +44,17 @@ async fn main() -> Result<()> {
 
     let standby = Arc::new(Standby::new());
 
-    let bot_context = BotContext::new(Arc::clone(&http), Arc::clone(&cache), Arc::clone(&standby));
+    // Load configuration (optional). If missing or invalid, defaults will be used.
+    let config = Arc::new(
+        Config::load_with_overrides("./config.toml").expect("Missing or invalid ./config.toml — please create a valid config.toml in the project root. See README for examples."),
+    );
+
+    let bot_context = BotContext::new(
+        Arc::clone(&http),
+        Arc::clone(&cache),
+        Arc::clone(&standby),
+        Arc::clone(&config),
+    );
 
     let handlers = HandlersSetup::new();
 
@@ -88,6 +102,8 @@ async fn main() -> Result<()> {
                         twilight_model::application::interaction::InteractionData::ApplicationCommand(cmd_data) => {
                             let cmd_name = &cmd_data.name;
                             let interaction_id = interaction.id;
+                            let application_id = interaction.application_id;
+                            let author_id = interaction.author_id();
                             let token = interaction.token.clone();
 
                             tracing::info!("Received slash command: {}", cmd_name);
@@ -98,13 +114,21 @@ async fn main() -> Result<()> {
                                     &SlashCommandContext::new(
                                         bot.clone(),
                                         interaction_id,
+                                        application_id,
+                                        author_id,
                                         token,
                                     )
                                 ).await {
                                     tracing::error!("Error executing help command: {}", e);
                                 }
                             } else if let Some(command) = cmd_mgr_clone.get(cmd_name) {
-                                let ctx = SlashCommandContext::new(bot.clone(), interaction_id, token);
+                                let ctx = SlashCommandContext::new(
+                                    bot.clone(),
+                                    interaction_id,
+                                    application_id,
+                                    author_id,
+                                    token,
+                                );
                                 if let Err(e) = command.execute(&ctx).await {
                                     tracing::error!("Error executing command '{}': {}", cmd_name, e);
                                 }

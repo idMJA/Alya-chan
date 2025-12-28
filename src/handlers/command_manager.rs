@@ -84,10 +84,13 @@ impl CommandManager {
         bot: BotContext,
         name: &str,
         interaction_id: twilight_model::id::Id<twilight_model::id::marker::InteractionMarker>,
+        application_id: twilight_model::id::Id<twilight_model::id::marker::ApplicationMarker>,
+        author_id: Option<twilight_model::id::Id<twilight_model::id::marker::UserMarker>>,
         token: String,
     ) -> BotResult<()> {
         if let Some(command) = self.get(name) {
-            let ctx = SlashCommandContext::new(bot, interaction_id, token);
+            let ctx =
+                SlashCommandContext::new(bot, interaction_id, application_id, author_id, token);
             command.execute(&ctx).await?;
         }
 

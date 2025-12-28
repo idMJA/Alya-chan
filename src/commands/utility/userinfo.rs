@@ -22,7 +22,7 @@ impl SlashCommand for UserInfoCommand {
 
         ctx.bot
             .http
-            .interaction(ctx.interaction_id.cast())
+            .interaction(ctx.application_id.cast())
             .create_response(
                 ctx.interaction_id.cast(),
                 &ctx.token,
