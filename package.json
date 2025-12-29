@@ -10,13 +10,6 @@
     "format": "cargo fmt --all",
     "lint": "cargo check && cargo clippy --all -- -D warnings"
   },
-  "lint-staged": {
-    "*.rs": [
-      "cargo fmt -- --check",
-      "cargo check",
-      "cargo clippy -- -D warnings"
-    ]
-  },
   "dependencies": {},
   "devDependencies": {
     "husky": "^9.1.7",
