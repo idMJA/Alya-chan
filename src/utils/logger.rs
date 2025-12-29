@@ -1,6 +1,5 @@
 use tracing_subscriber::{filter::EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
-/// Initialize logger dengan format yang bagus
 pub fn init_logger() {
     tracing_subscriber::registry()
         .with(

@@ -52,23 +52,20 @@ impl SlashCommand for HelpCommand {
         if let Some(manager) = &self.command_manager {
             let categories = manager.get_all_categories();
 
-            // author mention
             let author_mention = ctx
                 .author_id
                 .as_ref()
                 .map(|id| format!("<@{}>", id))
                 .unwrap_or_else(|| String::from("<@unknown>"));
 
-            // Main embed following the user's requested text
             let mut main = EmbedBuilder::new()
                 .color(ctx.bot.config.color.primary)
                 .title("Alya-chan Help Center")
                 .description(format!("**Konnichiwa! {}, I'm Alya-chan**\n\n**A multifunctional Discord bot inspired by your favorite anime characters. With powerful features, Alya-chan is not only ready to accompany you to play, but also help you manage your Discord server more effectively. Equipped with various moderation, entertainment, and utility features, and more. Alya-chan is a loyal friend who is ready to help anytime!**", author_mention))
-                .field(twilight_util::builder::embed::EmbedFieldBuilder::new("\u{200B}", "\u{200B}"))
-                // Replace static features with dynamic categories and emoji
+                .field(twilight_util::builder::embed::EmbedFieldBuilder::new("\u{200B}", "\u{200B}"))   
                 .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
                     "Categories",
-                    &categories
+                    categories
                         .iter()
                         .map(|c| {
                             let emoji = match *c {
@@ -88,7 +85,6 @@ impl SlashCommand for HelpCommand {
                 ))
                 .timestamp(Timestamp::from_secs(chrono::Utc::now().timestamp()).unwrap());
 
-            // banner is required and validated during config load
             let banner = &ctx.bot.config.info.banner;
             main = main.image(ImageSource::url(banner).expect("banner validated at startup"));
 
@@ -98,7 +94,6 @@ impl SlashCommand for HelpCommand {
 
             let main_embed = main.build();
 
-            // Build select menu options
             let options = categories
                 .into_iter()
                 .map(|c| SelectMenuOption {

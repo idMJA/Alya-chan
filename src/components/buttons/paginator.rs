@@ -31,7 +31,6 @@ impl ComponentHandler for PaginatorButton {
         if let Some(InteractionData::MessageComponent(mc)) = &interaction.data {
             let custom = mc.custom_id.as_str();
 
-            // Expect format: pagination-pageNext:{category}:{page} or pagination-pagePrev:{category}:{page}
             let parts: Vec<&str> = custom.split(':').collect();
             if parts.len() != 3 {
                 return Ok(());
@@ -43,7 +42,6 @@ impl ComponentHandler for PaginatorButton {
 
             let commands = self.cmd_mgr.get_commands_by_category(category);
 
-            // Rebuild pages
             let mut embeds = Vec::new();
             for chunk in commands.chunks(5) {
                 let description = chunk
@@ -56,7 +54,7 @@ impl ComponentHandler for PaginatorButton {
                     .join("\n\n");
 
                 let embed = EmbedBuilder::new()
-                    .title(format!("{} Commands", category.to_string()))
+                    .title(format!("{} Commands", category))
                     .description(description)
                     .build();
 
@@ -66,8 +64,6 @@ impl ComponentHandler for PaginatorButton {
             let pages = embeds.len();
             let mut components = Vec::new();
 
-            // recreate select menu row (keep original appearance)
-            // Build select options from categories
             let categories = self.cmd_mgr.get_all_categories();
             let options = categories
                 .into_iter()
@@ -101,7 +97,6 @@ impl ComponentHandler for PaginatorButton {
                 components: vec![Component::SelectMenu(select)],
             }));
 
-            // Buttons row: Prev and Next target pages
             if pages > 1 {
                 let prev_page = if page == 0 { 0 } else { page - 1 };
                 let next_page = if page + 1 >= pages {
@@ -113,9 +108,8 @@ impl ComponentHandler for PaginatorButton {
                 let prev_custom = format!("pagination-pagePrev:{}:{}", category, prev_page);
                 let next_custom = format!("pagination-pageNext:{}:{}", category, next_page);
 
-                let mut buttons = Vec::new();
-                buttons.push(Component::Button(
-                    twilight_model::channel::message::component::Button {
+                let buttons = vec![
+                    Component::Button(twilight_model::channel::message::component::Button {
                         id: None,
                         custom_id: Some(prev_custom),
                         disabled: page == 0,
@@ -124,11 +118,8 @@ impl ComponentHandler for PaginatorButton {
                         style: twilight_model::channel::message::component::ButtonStyle::Secondary,
                         url: None,
                         sku_id: None,
-                    },
-                ));
-
-                buttons.push(Component::Button(
-                    twilight_model::channel::message::component::Button {
+                    }),
+                    Component::Button(twilight_model::channel::message::component::Button {
                         id: None,
                         custom_id: Some(next_custom),
                         disabled: page + 1 >= pages,
@@ -137,8 +128,8 @@ impl ComponentHandler for PaginatorButton {
                         style: twilight_model::channel::message::component::ButtonStyle::Primary,
                         url: None,
                         sku_id: None,
-                    },
-                ));
+                    }),
+                ];
 
                 components.push(Component::ActionRow(ActionRow {
                     id: None,
@@ -146,7 +137,6 @@ impl ComponentHandler for PaginatorButton {
                 }));
             }
 
-            // Update message (replace embed with requested page)
             let embed_to_send = embeds.get(page).cloned();
             ctx.bot
                 .http

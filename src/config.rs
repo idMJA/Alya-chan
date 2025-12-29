@@ -3,7 +3,6 @@ use serde::Deserialize;
 use std::fs;
 use url::Url;
 
-/// Bot configuration loaded from `config.toml` (required)
 #[derive(Debug, Clone)]
 pub struct Config {
     pub color: ColorConfig,
@@ -14,15 +13,11 @@ pub struct Config {
 #[derive(Debug, Clone)]
 pub struct ColorConfig {
     pub primary: u32,
-    pub no: u32,
 }
 
 #[derive(Debug, Clone)]
 pub struct InfoConfig {
     pub banner: String,
-    pub invite_link: Option<String>,
-    pub support_server: Option<String>,
-    pub vote_link: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -73,15 +68,11 @@ struct RawConfig {
 #[derive(Deserialize)]
 struct RawColor {
     primary: toml::Value,
-    no: Option<toml::Value>,
 }
 
 #[derive(Deserialize)]
 struct RawInfo {
     banner: String,
-    invite_link: Option<String>,
-    support_server: Option<String>,
-    vote_link: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -123,7 +114,6 @@ struct RawEmoji {
 }
 
 impl Config {
-    /// Load configuration from path. `config.toml` is required and must contain the required keys.
     pub fn load_from_path(path: &str) -> Result<Self> {
         let content = fs::read_to_string(path)
             .with_context(|| format!("Config file not found or unreadable: {}", path))?;
@@ -131,19 +121,13 @@ impl Config {
         let raw: RawConfig = toml::from_str(&content)
             .with_context(|| format!("Failed to parse TOML in config file: {}", path))?;
 
-        // Parse colors
         let primary = match parse_color_value(&raw.color.primary) {
             Some(v) => v,
             None => anyhow::bail!("Invalid or missing color.primary in config.toml"),
         };
 
-        let no = match &raw.color.no {
-            Some(v) => parse_color_value(v)
-                .ok_or_else(|| anyhow::anyhow!("Invalid color.no in config.toml"))?,
-            None => anyhow::bail!("Missing required key: color.no in config.toml"),
-        };
+        // color.no removed — we only require `color.primary` for now
 
-        // Validate banner
         let banner = {
             let b = raw.info.banner;
             let parsed = Url::parse(&b)
@@ -155,7 +139,6 @@ impl Config {
             b
         };
 
-        // Start building emoji config from raw (may be missing keys)
         let mut emoji = EmojiConfig::default();
         if let Some(r) = raw.emoji {
             if let Some(s) = r.yes {
@@ -263,24 +246,18 @@ impl Config {
         }
 
         Ok(Self {
-            color: ColorConfig { primary, no },
-            info: InfoConfig {
-                banner,
-                invite_link: raw.info.invite_link,
-                support_server: raw.info.support_server,
-                vote_link: raw.info.vote_link,
-            },
+            color: ColorConfig { primary },
+            info: InfoConfig { banner },
             emoji,
         })
     }
 }
 
-// call emoji overrides at the end of load
 impl Config {
     pub fn load_with_overrides(path: &str) -> Result<Self> {
         let mut cfg = Self::load_from_path(path)?;
         load_emoji_overrides(&mut cfg);
-        // Validate that all emoji fields are present after applying overrides
+
         let mut missing = Vec::new();
 
         if cfg.emoji.yes.is_empty() {
@@ -397,10 +374,8 @@ impl Config {
     }
 }
 
-// Try to load emoji overrides from a separate emoji.toml if present
 fn load_emoji_overrides(cfg: &mut Config) {
     if let Ok(content) = fs::read_to_string("./emoji.toml") {
-        // Try to parse file into the same RawEmoji struct (expects [emoji] table)
         #[derive(Deserialize)]
         struct EmojiFile {
             emoji: RawEmoji,

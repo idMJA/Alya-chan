@@ -4,7 +4,6 @@ use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
 
-/// Slash command userinfo untuk menampilkan informasi user
 pub struct UserInfoCommand;
 
 #[async_trait]

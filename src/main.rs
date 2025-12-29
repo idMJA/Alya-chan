@@ -44,7 +44,6 @@ async fn main() -> Result<()> {
 
     let standby = Arc::new(Standby::new());
 
-    // Load configuration (optional). If missing or invalid, defaults will be used.
     let config = Arc::new(
         Config::load_with_overrides("./config.toml").expect("Missing or invalid ./config.toml — please create a valid config.toml in the project root. See README for examples."),
     );

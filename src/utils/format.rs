@@ -1,4 +1,4 @@
-/// Format uptime duration ke string yang readable
+
 pub fn format_duration(seconds: u64) -> String {
     let days = seconds / 86400;
     let hours = (seconds % 86400) / 3600;
@@ -23,7 +23,7 @@ pub fn format_duration(seconds: u64) -> String {
     parts.join(" ")
 }
 
-/// Format number dengan thousands separator
+
 pub fn format_number(n: u64) -> String {
     let s = n.to_string();
     let mut result = String::new();

@@ -6,9 +6,11 @@ use twilight_model::application::interaction::InteractionData;
 use twilight_model::channel::message::component::{
     ActionRow, Component, SelectMenu, SelectMenuOption, SelectMenuType,
 };
+use twilight_model::channel::message::EmojiReactionType;
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
+use twilight_model::id::Id;
 use twilight_util::builder::embed::EmbedBuilder;
 
 pub struct HelpMenuSelect {
@@ -36,16 +38,13 @@ impl ComponentHandler for HelpMenuSelect {
     }
 
     async fn handle(&self, ctx: &ComponentContext) -> BotResult<()> {
-        // Extract selected value (category)
         let interaction = &*ctx.interaction;
 
         if let Some(InteractionData::MessageComponent(mc)) = &interaction.data {
-            let category = mc.values.get(0).cloned().unwrap_or_default();
+            let category = mc.values.first().cloned().unwrap_or_default();
 
-            // Get commands in this category
             let commands = self.cmd_mgr.get_commands_by_category(&category);
 
-            // Build pages (5 commands per page)
             let mut embeds = Vec::new();
             for chunk in commands.chunks(5) {
                 let description = chunk
@@ -75,15 +74,54 @@ impl ComponentHandler for HelpMenuSelect {
                 embeds.push(embed);
             }
 
-            // Build select menu (keep same options) - rebuild using existing categories
             let categories = self.cmd_mgr.get_all_categories();
             let options = categories
                 .into_iter()
                 .map(|c| SelectMenuOption {
                     default: c == category,
-                    emoji: None,
+                    emoji: {
+                        // Map category to emoji string from config
+                        let emoji_str = match c {
+                            "configurations" => &ctx.bot.config.emoji.pencil,
+                            "informations" => &ctx.bot.config.emoji.info,
+                            "music" => &ctx.bot.config.emoji.music,
+                            "filters" => &ctx.bot.config.emoji.list,
+                            "playlists" => &ctx.bot.config.emoji.folder,
+                            "reports" => &ctx.bot.config.emoji.warn,
+                            _ => &ctx.bot.config.emoji.question,
+                        };
+
+                        // Try to parse string into EmojiReactionType
+                        fn parse_emoji(s: &str) -> Option<EmojiReactionType> {
+                            let s = s.trim();
+                            if s.starts_with('<') && s.ends_with('>') {
+                                let inner = &s[1..s.len() - 1];
+                                let parts: Vec<&str> = inner.split(':').collect();
+                                if parts.len() == 3 {
+                                    let animated = parts[0] == "a";
+                                    let name = parts[1];
+                                    if let Ok(id_num) = parts[2].parse::<u64>() {
+                                        return Some(EmojiReactionType::Custom {
+                                            animated,
+                                            id: Id::new(id_num),
+                                            name: Some(name.to_string()),
+                                        });
+                                    }
+                                }
+                            }
+                            // Fallback to unicode emoji (or literal string)
+                            if !s.is_empty() {
+                                return Some(EmojiReactionType::Unicode {
+                                    name: s.to_string(),
+                                });
+                            }
+                            None
+                        }
+
+                        parse_emoji(emoji_str)
+                    },
                     description: None,
-                    label: capitalize_first(&c),
+                    label: capitalize_first(c),
                     value: c.to_string(),
                 })
                 .collect::<Vec<_>>();
@@ -102,21 +140,17 @@ impl ComponentHandler for HelpMenuSelect {
                 required: None,
             };
 
-            // For pagination: create prev/next buttons with target page encoded
             // We'll set target page indices in the custom_id as: pagination-pagePrev:{category}:{page}
             let mut components = Vec::new();
 
-            // First row: select menu
             components.push(Component::ActionRow(ActionRow {
                 id: None,
                 components: vec![Component::SelectMenu(select)],
             }));
 
-            // Second row: pagination buttons (if multiple pages)
             let pages = embeds.len();
             let mut buttons = Vec::new();
             if pages > 1 {
-                // Prev (disabled initially)
                 let prev_custom = format!("pagination-pagePrev:{}:{}", category, 0);
                 let next_custom = format!("pagination-pageNext:{}:{}", category, 1);
 
@@ -152,7 +186,6 @@ impl ComponentHandler for HelpMenuSelect {
                 }));
             }
 
-            // Respond by updating the original message (UpdateMessage)
             ctx.bot
                 .http
                 .interaction(interaction.application_id.cast())
@@ -162,7 +195,7 @@ impl ComponentHandler for HelpMenuSelect {
                     &InteractionResponse {
                         kind: InteractionResponseType::UpdateMessage,
                         data: Some(InteractionResponseData {
-                            embeds: Some(embeds.into_iter().map(|e| e).collect()),
+                            embeds: Some(embeds),
                             components: Some(components),
                             ..Default::default()
                         }),

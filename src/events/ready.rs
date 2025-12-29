@@ -2,7 +2,6 @@ use crate::types::{BotResult, EventContext, EventHandler};
 use async_trait::async_trait;
 use twilight_model::gateway::event::Event;
 
-/// Event handler untuk Ready event (ketika bot online)
 pub struct ReadyHandler;
 
 #[async_trait]

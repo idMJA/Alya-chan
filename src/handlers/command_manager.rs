@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Manager untuk menangani semua slash commands
 pub struct CommandManager {
     commands: HashMap<String, (Arc<dyn SlashCommand>, String)>,
     commands_by_category: BTreeMap<String, Vec<String>>,
@@ -17,7 +16,6 @@ impl CommandManager {
         }
     }
 
-    /// Register command baru dengan kategori
     pub fn register(&mut self, category: &str, command: Arc<dyn SlashCommand>) {
         let name = command.name().to_lowercase();
         let category_string = category.to_string();
@@ -25,7 +23,6 @@ impl CommandManager {
         self.commands
             .insert(name.clone(), (command.clone(), category_string.clone()));
 
-        // Track by category
         self.commands_by_category
             .entry(category_string.clone())
             .or_default()
@@ -38,17 +35,14 @@ impl CommandManager {
         );
     }
 
-    /// Get command by name
     pub fn get(&self, name: &str) -> Option<&Arc<dyn SlashCommand>> {
         self.commands.get(&name.to_lowercase()).map(|(cmd, _)| cmd)
     }
 
-    /// Get all unique commands
     pub fn get_all_commands(&self) -> Vec<&Arc<dyn SlashCommand>> {
         self.commands.values().map(|(cmd, _)| cmd).collect()
     }
 
-    /// Get commands by category
     pub fn get_commands_by_category(&self, category: &str) -> Vec<&Arc<dyn SlashCommand>> {
         self.commands_by_category
             .get(category)
@@ -61,7 +55,6 @@ impl CommandManager {
             .unwrap_or_default()
     }
 
-    /// Get all categories
     pub fn get_all_categories(&self) -> Vec<&str> {
         self.commands_by_category
             .keys()
@@ -69,7 +62,6 @@ impl CommandManager {
             .collect()
     }
 
-    /// Get metadata untuk semua commands
     #[allow(dead_code)]
     pub fn get_all_metadata(&self) -> Vec<CommandMeta> {
         self.commands
@@ -77,7 +69,7 @@ impl CommandManager {
             .map(|(cmd, _)| cmd.metadata())
             .collect()
     }
-    /// Execute slash command
+
     #[allow(dead_code)]
     pub async fn execute(
         &self,

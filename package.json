@@ -1,0 +1,25 @@
+{
+  "name": "alya-chan",
+  "author": {
+    "email": "kiyomi@mjba.my",
+    "name": "iaMJ"
+  },
+  "scripts": {
+    "start": "cargo run",
+    "start:release": "cargo run --release",
+    "format": "cargo fmt --all",
+    "lint": "cargo check && cargo clippy --all -- -D warnings"
+  },
+  "lint-staged": {
+    "*.rs": [
+      "cargo fmt -- --check",
+      "cargo check",
+      "cargo clippy -- -D warnings"
+    ]
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7"
+  }
+}

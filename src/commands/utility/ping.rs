@@ -4,7 +4,6 @@ use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
 
-/// Slash command ping untuk test bot responsiveness
 pub struct PingCommand;
 
 #[async_trait]
