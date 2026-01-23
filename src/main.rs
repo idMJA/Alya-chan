@@ -17,6 +17,8 @@ use twilight_http::Client as HttpClient;
 use twilight_standby::Standby;
 
 use crate::config::Config;
+use crate::database::hybrid::HybridStore;
+use crate::database::service::AlyaDatabase;
 use handlers::{get_default_intents, HandlersSetup};
 use types::BotContext;
 use types::SlashCommand;
@@ -48,6 +50,20 @@ async fn main() -> Result<()> {
     let config = Arc::new(
         Config::load_with_overrides("./config.toml").expect("Missing or invalid ./config.toml — please create a valid config.toml in the project root. See README for examples."),
     );
+
+    // Initialize hybrid database (local SQLite + optional Turso/libsql)
+    let turso_url = env::var("TURSO_URL").ok();
+    let turso_token = env::var("TURSO_TOKEN").ok();
+    if let Err(e) =
+        AlyaDatabase::init("data/alya.db", turso_url.as_deref(), turso_token.as_deref()).await
+    {
+        tracing::error!("Failed to initialize AlyaDatabase: {}", e);
+    }
+    if let Err(e) =
+        HybridStore::init("data/alya.db", turso_url.as_deref(), turso_token.as_deref()).await
+    {
+        tracing::error!("Failed to initialize hybrid store: {}", e);
+    }
 
     let bot_context = BotContext::new(
         Arc::clone(&http),
@@ -104,6 +120,7 @@ async fn main() -> Result<()> {
                             let interaction_id = interaction.id;
                             let application_id = interaction.application_id;
                             let author_id = interaction.author_id();
+                            let guild_id = interaction.guild_id;
                             let token = interaction.token.clone();
 
                             tracing::info!("Received slash command: {}", cmd_name);
@@ -116,7 +133,9 @@ async fn main() -> Result<()> {
                                         interaction_id,
                                         application_id,
                                         author_id,
+                                        guild_id,
                                         token,
+                                        (**cmd_data).clone(),
                                     )
                                 ).await {
                                     tracing::error!("Error executing help command: {}", e);
@@ -127,7 +146,9 @@ async fn main() -> Result<()> {
                                     interaction_id,
                                     application_id,
                                     author_id,
+                                    guild_id,
                                     token,
+                                    (**cmd_data).clone(),
                                 );
                                 if let Err(e) = command.execute(&ctx).await {
                                     tracing::error!("Error executing command '{}': {}", cmd_name, e);

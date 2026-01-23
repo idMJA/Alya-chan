@@ -8,11 +8,27 @@ pub struct Config {
     pub color: ColorConfig,
     pub info: InfoConfig,
     pub emoji: EmojiConfig,
+    pub global_chat: Option<GlobalChatConfig>,
+    pub chatbot: Option<ChatbotConfig>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GlobalChatConfig {
+    pub enabled: bool,
+    pub api_url: String,
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChatbotConfig {
+    pub enabled: bool,
+    pub api_key: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct ColorConfig {
     pub primary: u32,
+    pub no: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -63,11 +79,27 @@ struct RawConfig {
     color: RawColor,
     info: RawInfo,
     emoji: Option<RawEmoji>,
+    global_chat: Option<RawGlobalChat>,
+    chatbot: Option<RawChatbot>,
+}
+
+#[derive(Deserialize)]
+struct RawGlobalChat {
+    enabled: bool,
+    api_url: String,
+    api_key: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RawChatbot {
+    enabled: bool,
+    api_key: String,
 }
 
 #[derive(Deserialize)]
 struct RawColor {
     primary: toml::Value,
+    no: toml::Value,
 }
 
 #[derive(Deserialize)]
@@ -126,7 +158,10 @@ impl Config {
             None => anyhow::bail!("Invalid or missing color.primary in config.toml"),
         };
 
-        // color.no removed — we only require `color.primary` for now
+        let no = match parse_color_value(&raw.color.no) {
+            Some(v) => v,
+            None => anyhow::bail!("Invalid or missing color.no in config.toml"),
+        };
 
         let banner = {
             let b = raw.info.banner;
@@ -246,9 +281,18 @@ impl Config {
         }
 
         Ok(Self {
-            color: ColorConfig { primary },
+            color: ColorConfig { primary, no },
             info: InfoConfig { banner },
             emoji,
+            global_chat: raw.global_chat.map(|gc| GlobalChatConfig {
+                enabled: gc.enabled,
+                api_url: gc.api_url,
+                api_key: gc.api_key,
+            }),
+            chatbot: raw.chatbot.map(|cb| ChatbotConfig {
+                enabled: cb.enabled,
+                api_key: cb.api_key,
+            }),
         })
     }
 }

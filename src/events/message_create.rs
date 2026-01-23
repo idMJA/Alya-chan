@@ -1,4 +1,6 @@
 use crate::types::{BotResult, EventContext, EventHandler};
+use crate::utils::chatbot::handle_chatbot;
+use crate::utils::global_chat::handle_global_chat;
 use async_trait::async_trait;
 use twilight_model::gateway::event::Event;
 
@@ -23,6 +25,16 @@ impl EventHandler for MessageCreateHandler {
                 msg.channel_id,
                 msg.content
             );
+
+            // Handle chatbot responses
+            if let Err(e) = handle_chatbot(ctx, msg).await {
+                tracing::warn!("Chatbot handler error: {:?}", e);
+            }
+
+            // Handle global chat broadcasting
+            if let Err(e) = handle_global_chat(ctx, msg).await {
+                tracing::warn!("Global chat handler error: {:?}", e);
+            }
         }
 
         Ok(())

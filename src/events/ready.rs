@@ -1,4 +1,5 @@
 use crate::types::{BotResult, EventContext, EventHandler};
+use crate::utils::constants::BOT_VERSION;
 use async_trait::async_trait;
 use twilight_model::gateway::event::Event;
 
@@ -13,9 +14,10 @@ impl EventHandler for ReadyHandler {
     async fn handle(&self, ctx: &EventContext) -> BotResult<()> {
         if let Event::Ready(ready) = &ctx.event {
             tracing::info!(
-                "Bot is ready! Logged in as {}#{}",
+                "Bot is ready! Logged in as {}#{} [v{}]",
                 ready.user.name,
-                ready.user.discriminator
+                ready.user.discriminator,
+                BOT_VERSION
             );
 
             tracing::info!("Connected to {} guilds", ready.guilds.len());

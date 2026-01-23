@@ -10,8 +10,6 @@ pub struct Model {
     pub id: String,
     /// Locale settings
     pub locale: Option<String>,
-    /// Chatbot locale settings
-    pub chatbot_locale: Option<String>,
     /// Prefix settings
     pub prefix: Option<String>,
     /// Setup settings - chatbot channel

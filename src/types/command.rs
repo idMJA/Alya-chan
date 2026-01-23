@@ -1,6 +1,7 @@
 use super::{BotContext, BotResult};
 use async_trait::async_trait;
-use twilight_model::id::marker::UserMarker;
+use twilight_model::application::interaction::application_command::CommandData;
+use twilight_model::id::marker::{GuildMarker, UserMarker};
 use twilight_model::id::Id;
 
 pub struct SlashCommandContext {
@@ -8,7 +9,9 @@ pub struct SlashCommandContext {
     pub interaction_id: twilight_model::id::Id<twilight_model::id::marker::InteractionMarker>,
     pub application_id: twilight_model::id::Id<twilight_model::id::marker::ApplicationMarker>,
     pub author_id: Option<Id<UserMarker>>,
+    pub guild_id: Option<Id<GuildMarker>>,
     pub token: String,
+    pub data: Box<CommandData>,
 }
 
 impl SlashCommandContext {
@@ -17,14 +20,18 @@ impl SlashCommandContext {
         interaction_id: twilight_model::id::Id<twilight_model::id::marker::InteractionMarker>,
         application_id: twilight_model::id::Id<twilight_model::id::marker::ApplicationMarker>,
         author_id: Option<Id<UserMarker>>,
+        guild_id: Option<Id<GuildMarker>>,
         token: String,
+        data: CommandData,
     ) -> Self {
         Self {
             bot,
             interaction_id,
             application_id,
             author_id,
+            guild_id,
             token,
+            data: Box::new(data),
         }
     }
 }

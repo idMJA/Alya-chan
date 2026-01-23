@@ -1,3 +1,4 @@
+pub mod hybrid;
 pub mod schema;
 pub mod service;
 
