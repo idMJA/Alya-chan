@@ -1,0 +1,33 @@
+# Example config for Alya-chan
+# Rename this file to config.toml and fill in the required values.
+# Color can be provided as an integer (decimal or 0xHEX) or as a hex string.
+
+# Examples:
+# color = 0x5865f2
+# color = "#5865f2"
+# color = "5865f2"
+
+[color] 
+primary = "#5865f2"
+no = "#ff0000"
+
+[info]
+# Banner image shown on the help menu
+banner = "https://i.ibb.co/hrpKCdy/e1da98e96fdfc12635909f99725d971e.png"
+
+[global_chat] # Internal global chat configuration
+# Enable or disable the global chat feature
+enabled = false
+
+# URL of the global chat API server
+api_url = "http://localhost:4000"
+
+# API key for authentication (sent as Authorization: Bearer <key>)
+api_key = "your_global_chat_api_key_here"
+
+[chatbot]
+# Enable or disable the chatbot feature
+enabled = false
+
+# OpenRouter API key (get from https://openrouter.ai/keys)
+api_key = "your_openrouter_api_key_here"
