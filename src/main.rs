@@ -1,6 +1,7 @@
 mod commands;
 mod components;
 mod config;
+mod database;
 mod events;
 mod handlers;
 mod types;
