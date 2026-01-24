@@ -4,11 +4,13 @@ use async_trait::async_trait;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::json;
 use twilight_model::application::interaction::InteractionData;
-use twilight_model::channel::ChannelType;
-use twilight_model::channel::permission_overwrite::{PermissionOverwrite, PermissionOverwriteType};
-use twilight_model::guild::Permissions;
-use twilight_model::http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType};
 use twilight_model::channel::message::MessageFlags;
+use twilight_model::channel::permission_overwrite::{PermissionOverwrite, PermissionOverwriteType};
+use twilight_model::channel::ChannelType;
+use twilight_model::guild::Permissions;
+use twilight_model::http::interaction::{
+    InteractionResponse, InteractionResponseData, InteractionResponseType,
+};
 use twilight_util::builder::embed::EmbedBuilder;
 
 pub struct GlobalChatCreateButton;
@@ -36,9 +38,7 @@ impl ComponentHandler for GlobalChatCreateButton {
         let guild_id = match parts.next().and_then(|id| id.parse::<u64>().ok()) {
             Some(id) => twilight_model::id::Id::<twilight_model::id::marker::GuildMarker>::new(id),
             None => {
-                return self
-                    .respond_error(ctx, "Invalid guild ID")
-                    .await;
+                return self.respond_error(ctx, "Invalid guild ID").await;
             }
         };
 
@@ -177,10 +177,7 @@ impl ComponentHandler for GlobalChatCreateButton {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
         if let Some(key) = &gc_config.api_key {
-            headers.insert(
-                AUTHORIZATION,
-                format!("Bearer {}", key).parse().unwrap(),
-            );
+            headers.insert(AUTHORIZATION, format!("Bearer {}", key).parse().unwrap());
         }
 
         // Register with API

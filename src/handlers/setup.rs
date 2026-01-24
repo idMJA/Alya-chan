@@ -1,6 +1,6 @@
 use super::{CommandManager, ComponentManager, EventManager};
 use crate::commands::{setup_commands, AboutButton, HelpCommand};
-use crate::components::buttons::{SetupDeleteButton, GlobalChatCreateButton};
+use crate::components::buttons::{GlobalChatCreateButton, SetupDeleteButton};
 use crate::events::{GuildCreateHandler, MessageCreateHandler, ReadyHandler};
 use std::sync::Arc;
 use twilight_gateway::Intents;

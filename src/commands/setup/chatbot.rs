@@ -2,14 +2,14 @@ use crate::database::service::AlyaDatabase;
 use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
 use twilight_model::{
+    channel::message::component::{ActionRow, Button, ButtonStyle, Component},
+    channel::message::MessageFlags,
     channel::{
         permission_overwrite::{PermissionOverwrite, PermissionOverwriteType},
         ChannelType,
     },
-    channel::message::component::{ActionRow, Button, ButtonStyle, Component},
-    channel::message::MessageFlags,
-    http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
     guild::Permissions,
+    http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
 };
 use twilight_util::builder::embed::EmbedBuilder;
 
@@ -62,7 +62,7 @@ impl SlashCommand for ChatbotCommand {
             Ok(Some(existing)) => {
                 // Show status with delete option using embed
                 let channel_id_num = existing.channel_id.parse::<u64>().unwrap_or(0);
-                
+
                 let status_embed = EmbedBuilder::new()
                     .color(ctx.bot.config.color.primary)
                     .title(&format!("{} Chatbot Setup Status", ctx.bot.config.emoji.robot))

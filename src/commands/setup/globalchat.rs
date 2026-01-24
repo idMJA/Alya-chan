@@ -3,14 +3,14 @@ use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
 use serde_json::json;
 use twilight_model::{
+    channel::message::component::{ActionRow, Button, ButtonStyle, Component},
+    channel::message::MessageFlags,
     channel::{
         permission_overwrite::{PermissionOverwrite, PermissionOverwriteType},
         ChannelType,
     },
-    channel::message::component::{ActionRow, Button, ButtonStyle, Component},
-    channel::message::MessageFlags,
-    http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
     guild::Permissions,
+    http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
 };
 use twilight_util::builder::embed::EmbedBuilder;
 
@@ -79,13 +79,19 @@ impl SlashCommand for GlobalChatCommand {
             .and_then(|data| data.get("guilds"))
             .and_then(|guilds| guilds.as_array())
             .and_then(|guilds| {
-                guilds.iter().find(|g| {
-                    g.get("id")
-                        .and_then(|id| id.as_str())
-                        .map(|id| id == guild_id.to_string())
-                        .unwrap_or(false)
-                })
-                .and_then(|g| g.get("globalChannelId").and_then(|c| c.as_str()).map(String::from))
+                guilds
+                    .iter()
+                    .find(|g| {
+                        g.get("id")
+                            .and_then(|id| id.as_str())
+                            .map(|id| id == guild_id.to_string())
+                            .unwrap_or(false)
+                    })
+                    .and_then(|g| {
+                        g.get("globalChannelId")
+                            .and_then(|c| c.as_str())
+                            .map(String::from)
+                    })
             });
 
         // Show status menu with embed (aesthetic design)

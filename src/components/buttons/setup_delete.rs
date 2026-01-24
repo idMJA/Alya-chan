@@ -4,7 +4,9 @@ use async_trait::async_trait;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use twilight_model::application::interaction::InteractionData;
 use twilight_model::channel::message::component::{ActionRow, Button, ButtonStyle, Component};
-use twilight_model::http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType};
+use twilight_model::http::interaction::{
+    InteractionResponse, InteractionResponseData, InteractionResponseType,
+};
 
 pub struct SetupDeleteButton;
 
@@ -25,7 +27,12 @@ impl SetupDeleteButton {
         })
     }
 
-    fn build_action_row(custom_id_confirm: &str, confirm_label: &str, custom_id_cancel: &str, cancel_label: &str) -> Component {
+    fn build_action_row(
+        custom_id_confirm: &str,
+        confirm_label: &str,
+        custom_id_cancel: &str,
+        cancel_label: &str,
+    ) -> Component {
         let confirm_btn = Component::Button(Button {
             custom_id: Some(custom_id_confirm.to_string()),
             disabled: false,
