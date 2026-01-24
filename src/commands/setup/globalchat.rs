@@ -7,7 +7,10 @@ use twilight_model::{
         permission_overwrite::{PermissionOverwrite, PermissionOverwriteType},
         ChannelType,
     },
+    channel::message::component::{ActionRow, Button, ButtonStyle, Component},
+    channel::message::MessageFlags,
     http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
+    guild::Permissions,
 };
 use twilight_util::builder::embed::EmbedBuilder;
 
@@ -43,23 +46,6 @@ impl SlashCommand for GlobalChatCommand {
             }
         };
 
-        // Defer reply
-        ctx.bot
-            .http
-            .interaction(ctx.application_id.cast())
-            .create_response(
-                ctx.interaction_id.cast(),
-                &ctx.token,
-                &InteractionResponse {
-                    kind: InteractionResponseType::DeferredChannelMessageWithSource,
-                    data: Some(InteractionResponseData {
-                        flags: Some(twilight_model::channel::message::MessageFlags::EPHEMERAL),
-                        ..Default::default()
-                    }),
-                },
-            )
-            .await?;
-
         // Prepare headers for API calls
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
@@ -87,203 +73,105 @@ impl SlashCommand for GlobalChatCommand {
             .await
             .map_err(|e| crate::types::error::BotError::Other(e.to_string()))?;
 
-        if let Some(guilds) = list_data.get("guilds").and_then(|g| g.as_array()) {
-            if let Some(existing) = guilds.iter().find(|g| {
-                g.get("id")
-                    .and_then(|id| id.as_str())
-                    .map(|id| id == guild_id.to_string())
-                    .unwrap_or(false)
-            }) {
-                let channel_id = existing
-                    .get("globalChannelId")
-                    .and_then(|c| c.as_str())
-                    .unwrap_or("unknown");
-                return self
-                    .respond_error(
-                        ctx,
-                        &format!(
-                            "This server already has global chat set up in <#{}>.",
-                            channel_id
-                        ),
-                    )
-                    .await;
-            }
-        }
+        // Parse response: data.guilds[...] with id and globalChannelId
+        let existing_channel_id = list_data
+            .get("data")
+            .and_then(|data| data.get("guilds"))
+            .and_then(|guilds| guilds.as_array())
+            .and_then(|guilds| {
+                guilds.iter().find(|g| {
+                    g.get("id")
+                        .and_then(|id| id.as_str())
+                        .map(|id| id == guild_id.to_string())
+                        .unwrap_or(false)
+                })
+                .and_then(|g| g.get("globalChannelId").and_then(|c| c.as_str()).map(String::from))
+            });
 
-        // Parse options to get channel if provided
-        let channel_id_opt = ctx.data.options.iter().find_map(|opt| {
-            if opt.name == "channel" {
-                match &opt.value {
-                    twilight_model::application::interaction::application_command::CommandOptionValue::Channel(id) => {
-                        Some(*id)
-                    }
-                    _ => None,
-                }
-            } else {
-                None
-            }
-        });
-
-        let (channel_id, created_new) = if let Some(channel_id) = channel_id_opt {
-            // Use existing channel
-            (channel_id, false)
-        } else {
-            // Create new channel
-            let bot_user = ctx.bot.cache.current_user().expect("Bot user not in cache");
-            let bot_id = bot_user.id;
-
-            let permission_overwrites = vec![
-                PermissionOverwrite {
-                    id: bot_id.cast(),
-                    kind: PermissionOverwriteType::Member,
-                    allow: twilight_model::guild::Permissions::VIEW_CHANNEL
-                        | twilight_model::guild::Permissions::SEND_MESSAGES
-                        | twilight_model::guild::Permissions::EMBED_LINKS
-                        | twilight_model::guild::Permissions::READ_MESSAGE_HISTORY
-                        | twilight_model::guild::Permissions::MANAGE_MESSAGES,
-                    deny: twilight_model::guild::Permissions::empty(),
-                },
-                PermissionOverwrite {
-                    id: guild_id.cast(),
-                    kind: PermissionOverwriteType::Role,
-                    allow: twilight_model::guild::Permissions::VIEW_CHANNEL
-                        | twilight_model::guild::Permissions::SEND_MESSAGES
-                        | twilight_model::guild::Permissions::READ_MESSAGE_HISTORY,
-                    deny: twilight_model::guild::Permissions::empty(),
-                },
-            ];
-
-            let new_channel = ctx
-                .bot
-                .http
-                .create_guild_channel(guild_id, "🌐・global-chat")
-                .kind(ChannelType::GuildText)
-                .topic("Alya Global Chat - Connect with users from other servers!")
-                .permission_overwrites(&permission_overwrites)
-                .await?
-                .model()
-                .await
-                .map_err(|e| crate::types::error::BotError::Other(e.to_string()))?;
-
-            // Send welcome message
-            let welcome_embed = EmbedBuilder::new()
+        // Show status menu with embed (aesthetic design)
+        let status_embed = if let Some(ref channel_id) = existing_channel_id {
+            EmbedBuilder::new()
                 .color(ctx.bot.config.color.primary)
-                .title(&format!(
-                    "{} Welcome to Global Chat!",
-                    ctx.bot.config.emoji.globe
+                .title(&format!("{} Global Chat Status", ctx.bot.config.emoji.globe))
+                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                    &format!("{} Status", ctx.bot.config.emoji.yes),
+                    "**Registered**",
                 ))
-                .description(&format!(
-                    "This channel is connected to a network of servers using Alya-chan.\n\
-                        Messages sent here will be broadcasted to all connected servers.\n\n\
-                        **Rules:**\n\
-                        {} Be respectful to all users\n\
-                        {} Follow Discord's Terms of Service\n\
-                        {} No spam or advertising\n\
-                        {} Have fun and make new friends!",
-                    ctx.bot.config.emoji.info,
-                    ctx.bot.config.emoji.info,
-                    ctx.bot.config.emoji.warn,
-                    ctx.bot.config.emoji.heart
+                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                    &format!("{} Channel", ctx.bot.config.emoji.folder),
+                    &format!("<#{}>", channel_id),
                 ))
-                .build();
-
-            ctx.bot
-                .http
-                .create_message(new_channel.id)
-                .embeds(&[welcome_embed])
-                .await?;
-
-            (new_channel.id, true)
-        };
-
-        // Create webhook
-        let webhook = ctx
-            .bot
-            .http
-            .create_webhook(channel_id, "Alya Global Chat")
-            .await?
-            .model()
-            .await
-            .map_err(|e| crate::types::error::BotError::Other(e.to_string()))?;
-
-        // Register with API
-        let register_body = json!({
-            "guildId": guild_id.to_string(),
-            "globalChannelId": channel_id.to_string(),
-            "webhookId": webhook.id.to_string(),
-            "webhookToken": webhook.token,
-        });
-
-        let register_response = client
-            .post(format!("{}/add", gc_config.api_url))
-            .headers(headers)
-            .json(&register_body)
-            .send()
-            .await
-            .map_err(|e| crate::types::error::BotError::Other(e.to_string()))?;
-
-        if !register_response.status().is_success() {
-            return self
-                .respond_error(ctx, "Failed to register with global chat API.")
-                .await;
-        }
-
-        // Save to database
-        let db = match AlyaDatabase::get() {
-            Ok(db) => db,
-            Err(e) => {
-                return self
-                    .respond_error(ctx, &format!("Database not ready: {}", e))
-                    .await;
-            }
-        };
-
-        if let Err(e) = db
-            .create_global_chat_channel(
-                &guild_id.to_string(),
-                &channel_id.to_string(),
-                Some(&webhook.id.to_string()),
-                webhook.token.as_deref(),
-            )
-            .await
-        {
-            return self
-                .respond_error(ctx, &format!("Failed to save global chat setup: {}", e))
-                .await;
-        }
-
-        // Send success response
-        let success_message = if created_new {
-            format!(
-                "{} Global chat has been successfully set up in <#{}>!\n\
-                {} Messages sent in this channel will be broadcasted to all connected servers.",
-                ctx.bot.config.emoji.yes, channel_id, ctx.bot.config.emoji.globe
-            )
+                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                    &format!("{} Description", ctx.bot.config.emoji.info),
+                    "This server is connected to the global chat network. Messages sent in this channel will be broadcasted to all connected servers.",
+                ))
+                .build()
         } else {
-            format!(
-                "{} Global chat has been successfully set up using <#{}>!\n\
-                {} Messages sent in this channel will be broadcasted to all connected servers.",
-                ctx.bot.config.emoji.yes, channel_id, ctx.bot.config.emoji.globe
-            )
+            EmbedBuilder::new()
+                .color(ctx.bot.config.color.primary)
+                .title(&format!("{} Global Chat Status", ctx.bot.config.emoji.warn))
+                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                    &format!("{} Status", ctx.bot.config.emoji.no),
+                    "**Not Registered**",
+                ))
+                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                    &format!("{} What is Global Chat?", ctx.bot.config.emoji.info),
+                    "Connect your server to a network of other servers. Share messages across communities and make new friends!",
+                ))
+                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                    &format!("{} Next Step", ctx.bot.config.emoji.arrow_right),
+                    "Click the button below to set up global chat for your server.",
+                ))
+                .build()
         };
 
-        let success_embed = EmbedBuilder::new()
-            .color(ctx.bot.config.color.primary)
-            .description(success_message)
-            .build();
+        // Create action button
+        let action_row = Component::ActionRow(ActionRow {
+            id: None,
+            components: if existing_channel_id.is_some() {
+                // Show delete button if already registered
+                vec![Component::Button(Button {
+                    custom_id: Some(format!("setup_del_globalchat_confirm:{}", guild_id)),
+                    disabled: false,
+                    label: Some("Delete Global Chat".to_string()),
+                    style: ButtonStyle::Danger,
+                    emoji: None,
+                    url: None,
+                    id: None,
+                    sku_id: None,
+                })]
+            } else {
+                // Show create button if not registered
+                vec![Component::Button(Button {
+                    custom_id: Some(format!("globalchat_create:{}", guild_id)),
+                    disabled: false,
+                    label: Some("Create Global Chat".to_string()),
+                    style: ButtonStyle::Primary,
+                    emoji: None,
+                    url: None,
+                    id: None,
+                    sku_id: None,
+                })]
+            },
+        });
 
         ctx.bot
             .http
             .interaction(ctx.application_id.cast())
-            .create_followup(&ctx.token)
-            .embeds(&[success_embed])
+            .create_response(
+                ctx.interaction_id.cast(),
+                &ctx.token,
+                &InteractionResponse {
+                    kind: InteractionResponseType::ChannelMessageWithSource,
+                    data: Some(InteractionResponseData {
+                        embeds: Some(vec![status_embed]),
+                        components: Some(vec![action_row]),
+                        flags: Some(MessageFlags::EPHEMERAL),
+                        ..Default::default()
+                    }),
+                },
+            )
             .await?;
-
-        tracing::info!(
-            "Global chat setup completed for guild {} in channel {}",
-            guild_id,
-            channel_id
-        );
 
         Ok(())
     }
@@ -306,11 +194,31 @@ impl GlobalChatCommand {
                     kind: InteractionResponseType::ChannelMessageWithSource,
                     data: Some(InteractionResponseData {
                         embeds: Some(vec![embed]),
-                        flags: Some(twilight_model::channel::message::MessageFlags::EPHEMERAL),
+                        flags: Some(MessageFlags::EPHEMERAL),
                         ..Default::default()
                     }),
                 },
             )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn respond_error_followup(
+        &self,
+        ctx: &SlashCommandContext,
+        message: &str,
+    ) -> BotResult<()> {
+        let embed = EmbedBuilder::new()
+            .color(ctx.bot.config.color.no)
+            .description(&format!("{} {}", ctx.bot.config.emoji.no, message))
+            .build();
+
+        ctx.bot
+            .http
+            .interaction(ctx.application_id.cast())
+            .create_followup(&ctx.token)
+            .embeds(&[embed])
             .await?;
 
         Ok(())

@@ -1,8 +1,15 @@
 use crate::database::service::AlyaDatabase;
 use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
-use twilight_model::http::interaction::{
-    InteractionResponse, InteractionResponseData, InteractionResponseType,
+use twilight_model::{
+    channel::{
+        permission_overwrite::{PermissionOverwrite, PermissionOverwriteType},
+        ChannelType,
+    },
+    channel::message::component::{ActionRow, Button, ButtonStyle, Component},
+    channel::message::MessageFlags,
+    http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
+    guild::Permissions,
 };
 use twilight_util::builder::embed::EmbedBuilder;
 
@@ -28,8 +35,8 @@ impl SlashCommand for ChatbotCommand {
             }
         };
 
-        // Parse channel option (required)
-        let channel_id = match ctx.data.options.iter().find_map(|opt| {
+        // Parse channel option (optional). If not provided, create a new channel.
+        let channel_id_opt = ctx.data.options.iter().find_map(|opt| {
             if opt.name == "channel" {
                 match &opt.value {
                     twilight_model::application::interaction::application_command::CommandOptionValue::Channel(id) => {
@@ -40,29 +47,7 @@ impl SlashCommand for ChatbotCommand {
             } else {
                 None
             }
-        }) {
-            Some(id) => id,
-            None => {
-                return self.respond_error(ctx, "Please provide a valid channel.").await;
-            }
-        };
-
-        // Defer reply
-        ctx.bot
-            .http
-            .interaction(ctx.application_id.cast())
-            .create_response(
-                ctx.interaction_id.cast(),
-                &ctx.token,
-                &InteractionResponse {
-                    kind: InteractionResponseType::DeferredChannelMessageWithSource,
-                    data: Some(InteractionResponseData {
-                        flags: Some(twilight_model::channel::message::MessageFlags::EPHEMERAL),
-                        ..Default::default()
-                    }),
-                },
-            )
-            .await?;
+        });
 
         let db = match AlyaDatabase::get() {
             Ok(db) => db,
@@ -75,15 +60,59 @@ impl SlashCommand for ChatbotCommand {
 
         match db.get_chatbot_setup(&guild_id.to_string()).await {
             Ok(Some(existing)) => {
-                return self
-                    .respond_error(
-                        ctx,
-                        &format!(
-                            "Chatbot channel is already set to <#{}>.\\nUse `/chatbot delete` to reset.",
-                            existing.channel_id
-                        ),
+                // Show status with delete option using embed
+                let channel_id_num = existing.channel_id.parse::<u64>().unwrap_or(0);
+                
+                let status_embed = EmbedBuilder::new()
+                    .color(ctx.bot.config.color.primary)
+                    .title(&format!("{} Chatbot Setup Status", ctx.bot.config.emoji.robot))
+                    .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                        &format!("{} Status", ctx.bot.config.emoji.yes),
+                        "**Already Configured**",
+                    ))
+                    .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                        &format!("{} Channel", ctx.bot.config.emoji.folder),
+                        &format!("<#{}>", channel_id_num),
+                    ))
+                    .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                        &format!("{} Description", ctx.bot.config.emoji.info),
+                        "This channel is configured to receive AI chatbot responses when mentioned.",
+                    ))
+                    .build();
+
+                let action_row = Component::ActionRow(ActionRow {
+                    id: None,
+                    components: vec![Component::Button(Button {
+                        custom_id: Some(format!("setup_del_chatbot_confirm:{}", guild_id)),
+                        disabled: false,
+                        label: Some("Delete Chatbot Setup".to_string()),
+                        style: ButtonStyle::Danger,
+                        emoji: None,
+                        url: None,
+                        id: None,
+                        sku_id: None,
+                    })],
+                });
+
+                ctx.bot
+                    .http
+                    .interaction(ctx.application_id.cast())
+                    .create_response(
+                        ctx.interaction_id.cast(),
+                        &ctx.token,
+                        &InteractionResponse {
+                            kind: InteractionResponseType::ChannelMessageWithSource,
+                            data: Some(InteractionResponseData {
+                                embeds: Some(vec![status_embed]),
+                                components: Some(vec![action_row]),
+                                flags: Some(MessageFlags::EPHEMERAL),
+                                ..Default::default()
+                            }),
+                        },
                     )
-                    .await;
+                    .await?;
+
+                return Ok(());
             }
             Err(e) => {
                 return self
@@ -93,25 +122,98 @@ impl SlashCommand for ChatbotCommand {
             _ => {}
         }
 
+        // Defer reply for creation flow
+        ctx.bot
+            .http
+            .interaction(ctx.application_id.cast())
+            .create_response(
+                ctx.interaction_id.cast(),
+                &ctx.token,
+                &InteractionResponse {
+                    kind: InteractionResponseType::DeferredChannelMessageWithSource,
+                    data: Some(InteractionResponseData {
+                        flags: Some(MessageFlags::EPHEMERAL),
+                        ..Default::default()
+                    }),
+                },
+            )
+            .await?;
+
+        // Resolve channel: use provided or create new one
+        let channel_id = if let Some(cid) = channel_id_opt {
+            cid
+        } else {
+            // Create new channel with permission overwrites
+            let bot_id = match ctx.bot.cache.current_user() {
+                Some(user) => user.id,
+                None => ctx.application_id.cast(),
+            };
+
+            // Get @everyone role ID (same as guild ID)
+            let everyone_role_id = guild_id;
+
+            // Permission overwrites
+            let permission_overwrites = vec![
+                PermissionOverwrite {
+                    id: bot_id.cast(),
+                    kind: PermissionOverwriteType::Member,
+                    allow: Permissions::VIEW_CHANNEL
+                        | Permissions::SEND_MESSAGES
+                        | Permissions::READ_MESSAGE_HISTORY
+                        | Permissions::MANAGE_MESSAGES,
+                    deny: Permissions::empty(),
+                },
+                PermissionOverwrite {
+                    id: everyone_role_id.cast(),
+                    kind: PermissionOverwriteType::Role,
+                    allow: Permissions::VIEW_CHANNEL | Permissions::READ_MESSAGE_HISTORY,
+                    deny: Permissions::empty(),
+                },
+            ];
+
+            let new_channel = ctx
+                .bot
+                .http
+                .create_guild_channel(guild_id, "🤖・chatbot")
+                .kind(ChannelType::GuildText)
+                .topic("Chatbot responses and interactions")
+                .permission_overwrites(&permission_overwrites)
+                .await?
+                .model()
+                .await
+                .map_err(|e| crate::types::error::BotError::Other(e.to_string()))?;
+
+            new_channel.id
+        };
+
         if let Err(e) = db
             .create_chatbot_setup(&guild_id.to_string(), &channel_id.to_string())
             .await
         {
             return self
-                .respond_error(ctx, &format!("Failed to save chatbot setup: {}", e))
+                .respond_error_followup(ctx, &format!("Failed to save chatbot setup: {}", e))
                 .await;
         }
 
-        // Send success response
-        let success_message = format!(
-            "{} Chatbot has been successfully set up in <#{}>!\n\
-            I will respond to messages in this channel when mentioned or when 'alya' is mentioned.",
-            ctx.bot.config.emoji.yes, channel_id
-        );
-
+        // Send success response with aesthetic embed
         let success_embed = EmbedBuilder::new()
             .color(ctx.bot.config.color.primary)
-            .description(success_message)
+            .title(&format!("{} Chatbot Setup Complete", ctx.bot.config.emoji.yes))
+            .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                &format!("{} Channel", ctx.bot.config.emoji.folder),
+                &format!("<#{}>", channel_id),
+            ))
+            .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                &format!("{} Functionality", ctx.bot.config.emoji.info),
+                "I will respond to messages in this channel when:\n\
+                • You mention me directly\n\
+                • You use the keyword 'alya'\n\
+                • Someone asks me a question",
+            ))
+            .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
+                &format!("{} Note", ctx.bot.config.emoji.pencil),
+                "This channel is configured and ready to use. You can manage this setup anytime using `/chatbot` command.",
+            ))
             .build();
 
         ctx.bot
@@ -135,7 +237,8 @@ impl ChatbotCommand {
     async fn respond_error(&self, ctx: &SlashCommandContext, message: &str) -> BotResult<()> {
         let embed = EmbedBuilder::new()
             .color(ctx.bot.config.color.no)
-            .description(&format!("{} {}", ctx.bot.config.emoji.no, message))
+            .title(&format!("{} Error", ctx.bot.config.emoji.no))
+            .description(message)
             .build();
 
         ctx.bot
@@ -148,11 +251,32 @@ impl ChatbotCommand {
                     kind: InteractionResponseType::ChannelMessageWithSource,
                     data: Some(InteractionResponseData {
                         embeds: Some(vec![embed]),
-                        flags: Some(twilight_model::channel::message::MessageFlags::EPHEMERAL),
+                        flags: Some(MessageFlags::EPHEMERAL),
                         ..Default::default()
                     }),
                 },
             )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn respond_error_followup(
+        &self,
+        ctx: &SlashCommandContext,
+        message: &str,
+    ) -> BotResult<()> {
+        let embed = EmbedBuilder::new()
+            .color(ctx.bot.config.color.no)
+            .title(&format!("{} Error", ctx.bot.config.emoji.no))
+            .description(message)
+            .build();
+
+        ctx.bot
+            .http
+            .interaction(ctx.application_id.cast())
+            .create_followup(&ctx.token)
+            .embeds(&[embed])
             .await?;
 
         Ok(())

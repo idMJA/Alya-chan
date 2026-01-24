@@ -87,6 +87,8 @@ pub struct EmojiConfig {
     pub trash: String,
     pub node_on: String,
     pub node_off: String,
+    pub robot: String,
+    pub arrow_right: String,
 }
 
 #[derive(Deserialize)]
