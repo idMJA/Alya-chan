@@ -7,5 +7,5 @@ pub mod event;
 pub use command::{CommandMeta, SlashCommand, SlashCommandContext};
 pub use component::{ComponentContext, ComponentHandler};
 pub use context::BotContext;
-pub use error::BotResult;
+pub use error::{BotError, BotResult};
 pub use event::{EventContext, EventHandler};

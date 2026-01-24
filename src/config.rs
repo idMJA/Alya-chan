@@ -8,8 +8,10 @@ pub struct Config {
     pub color: ColorConfig,
     pub info: InfoConfig,
     pub emoji: EmojiConfig,
+    pub database: Option<DatabaseConfig>,
     pub global_chat: Option<GlobalChatConfig>,
     pub chatbot: Option<ChatbotConfig>,
+    pub top_gg: Option<TopGgConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -20,9 +22,22 @@ pub struct GlobalChatConfig {
 }
 
 #[derive(Debug, Clone)]
+pub struct DatabaseConfig {
+    pub local_path: String,
+    pub remote_url: Option<String>,
+    pub remote_token: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct ChatbotConfig {
     pub enabled: bool,
     pub api_key: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TopGgConfig {
+    pub enabled: bool,
+    pub token: String,
 }
 
 #[derive(Debug, Clone)]
@@ -79,8 +94,11 @@ struct RawConfig {
     color: RawColor,
     info: RawInfo,
     emoji: Option<RawEmoji>,
+    database: Option<RawDatabase>,
     global_chat: Option<RawGlobalChat>,
     chatbot: Option<RawChatbot>,
+    #[serde(rename = "top-gg")]
+    top_gg: Option<RawTopGg>,
 }
 
 #[derive(Deserialize)]
@@ -91,9 +109,22 @@ struct RawGlobalChat {
 }
 
 #[derive(Deserialize)]
+struct RawDatabase {
+    local_path: Option<String>,
+    remote_url: Option<String>,
+    remote_token: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct RawChatbot {
     enabled: bool,
     api_key: String,
+}
+
+#[derive(Deserialize)]
+struct RawTopGg {
+    enabled: bool,
+    token: String,
 }
 
 #[derive(Deserialize)]
@@ -292,6 +323,15 @@ impl Config {
             chatbot: raw.chatbot.map(|cb| ChatbotConfig {
                 enabled: cb.enabled,
                 api_key: cb.api_key,
+            }),
+            top_gg: raw.top_gg.map(|tg| TopGgConfig {
+                enabled: tg.enabled,
+                token: tg.token,
+            }),
+            database: raw.database.map(|db| DatabaseConfig {
+                local_path: db.local_path.unwrap_or_else(|| "data/alya.db".to_string()),
+                remote_url: db.remote_url,
+                remote_token: db.remote_token,
             }),
         })
     }

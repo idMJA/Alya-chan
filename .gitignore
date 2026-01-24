@@ -5,3 +5,5 @@
 node_modules/
 migrations/
 config.toml
+data/
+old/

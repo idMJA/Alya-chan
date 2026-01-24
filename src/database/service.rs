@@ -1,8 +1,6 @@
-use crate::database::hybrid::HybridStore;
 use chrono::{DateTime, Duration, Utc};
-use libsql::{params, Builder, Database};
+use libsql::{params, Builder};
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::{OnceCell, RwLock};
 use uuid::Uuid;
@@ -36,8 +34,7 @@ pub struct PremiumStats {
 }
 
 pub struct AlyaDatabase {
-    local: Database,
-    remote: Option<Database>,
+    db: libsql::Database,
     cache: Arc<RwLock<HashMap<String, CachedGuild>>>,
     db_path: String,
     remote_url: Option<String>,
@@ -59,34 +56,28 @@ impl AlyaDatabase {
         remote_token: Option<&str>,
     ) -> anyhow::Result<&'static AlyaDatabase> {
         DB.get_or_try_init(|| async {
-            if let Some(parent) = Path::new(local_path).parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-
-            let local = Builder::new_local(local_path).build().await?;
-
-            let remote = if let Some(url) = remote_url {
+            let db = if let Some(url) = remote_url {
                 let token = remote_token.unwrap_or("");
-                Some(
-                    Builder::new_remote(url.to_string(), token.to_string())
-                        .build()
-                        .await?,
-                )
+                // Turso embedded replica: local sync + remote write
+                Builder::new_remote_replica(local_path, url.to_string(), token.to_string())
+                    .sync_interval(std::time::Duration::from_secs(300)) // Sync every 5 min
+                    .build()
+                    .await?
             } else {
-                None
+                // Local only fallback
+                Builder::new_local(local_path).build().await?
             };
 
-            let db = Self {
-                local,
-                remote,
+            let alya_db = Self {
+                db,
                 cache: Arc::new(RwLock::new(HashMap::new())),
                 db_path: local_path.to_string(),
                 remote_url: remote_url.map(ToString::to_string),
                 remote_token: remote_token.map(ToString::to_string),
             };
 
-            db.ensure_schema().await?;
-            Ok(db)
+            alya_db.ensure_schema().await?;
+            Ok(alya_db)
         })
         .await
     }
@@ -96,23 +87,16 @@ impl AlyaDatabase {
             .ok_or_else(|| anyhow::anyhow!("AlyaDatabase is not initialized"))
     }
 
-    pub async fn get_store() -> anyhow::Result<&'static HybridStore> {
-        if let Ok(db) = Self::get() {
-            HybridStore::init(
-                &db.db_path,
-                db.remote_url.as_deref(),
-                db.remote_token.as_deref(),
-            )
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to get hybrid store: {}", e))
-        } else {
-            HybridStore::init("data/alya.db", None, None)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to get hybrid store: {}", e))
-        }
+    /// Manually sync local replica from remote (call on bot startup)
+    pub async fn sync(&self) -> anyhow::Result<()> {
+        self.db.sync().await?;
+        tracing::info!("Database synced from remote");
+        Ok(())
     }
 
     async fn ensure_schema(&self) -> anyhow::Result<()> {
+        let conn = self.db.connect()?;
+
         const GUILD_SCHEMA: &str = r#"
             CREATE TABLE IF NOT EXISTS guild (
                 id TEXT PRIMARY KEY,
@@ -137,16 +121,8 @@ impl AlyaDatabase {
             );
         "#;
 
-        let conn = self.local.connect()?;
-        conn.execute(GUILD_SCHEMA, ()).await?;
-        conn.execute(USER_VOTE_SCHEMA, ()).await?;
-
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn.execute(GUILD_SCHEMA, ()).await;
-                let _ = conn.execute(USER_VOTE_SCHEMA, ()).await;
-            }
-        }
+        conn.execute_batch(GUILD_SCHEMA).await?;
+        conn.execute_batch(USER_VOTE_SCHEMA).await?;
 
         Ok(())
     }
@@ -166,7 +142,7 @@ impl AlyaDatabase {
             return Ok(locale);
         }
 
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         let mut rows = conn
             .query(
                 "SELECT locale FROM guild WHERE id = ?1 LIMIT 1",
@@ -201,7 +177,7 @@ impl AlyaDatabase {
             return Ok(prefix);
         }
 
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         let mut rows = conn
             .query(
                 "SELECT prefix FROM guild WHERE id = ?1 LIMIT 1",
@@ -229,14 +205,8 @@ impl AlyaDatabase {
         let sql = "INSERT INTO guild (id, locale, created_at, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET locale = excluded.locale, updated_at = CURRENT_TIMESTAMP";
 
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         conn.execute(sql, params![guild_id, locale]).await?;
-
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn.execute(sql, params![guild_id, locale]).await;
-            }
-        }
 
         self.cache
             .write()
@@ -252,14 +222,8 @@ impl AlyaDatabase {
         let sql = "INSERT INTO guild (id, prefix, created_at, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET prefix = excluded.prefix, updated_at = CURRENT_TIMESTAMP";
 
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         conn.execute(sql, params![guild_id, prefix]).await?;
-
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn.execute(sql, params![guild_id, prefix]).await;
-            }
-        }
 
         self.cache
             .write()
@@ -275,14 +239,8 @@ impl AlyaDatabase {
         let sql = "INSERT INTO guild (id, prefix, created_at, updated_at) VALUES (?1, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET prefix = NULL, updated_at = CURRENT_TIMESTAMP";
 
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         conn.execute(sql, params![guild_id]).await?;
-
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn.execute(sql, params![guild_id]).await;
-            }
-        }
 
         if let Some(cached) = self.cache.write().await.get_mut(guild_id) {
             cached.prefix = None;
@@ -292,7 +250,7 @@ impl AlyaDatabase {
     }
 
     pub async fn get_chatbot_setup(&self, guild_id: &str) -> anyhow::Result<Option<ISetup>> {
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         let mut rows = conn
             .query(
                 "SELECT id, chatbot_channel_id, created_at FROM guild WHERE id = ?1 LIMIT 1",
@@ -331,14 +289,8 @@ impl AlyaDatabase {
         let sql = "INSERT INTO guild (id, chatbot_channel_id, created_at, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET chatbot_channel_id = excluded.chatbot_channel_id, updated_at = CURRENT_TIMESTAMP";
 
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         conn.execute(sql, params![guild_id, channel_id]).await?;
-
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn.execute(sql, params![guild_id, channel_id]).await;
-            }
-        }
 
         Ok(())
     }
@@ -346,20 +298,14 @@ impl AlyaDatabase {
     pub async fn delete_chatbot_setup(&self, guild_id: &str) -> anyhow::Result<()> {
         let sql = "UPDATE guild SET chatbot_channel_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?1";
 
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         conn.execute(sql, params![guild_id]).await?;
-
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn.execute(sql, params![guild_id]).await;
-            }
-        }
 
         Ok(())
     }
 
     pub async fn get_global_chat_channel(&self, guild_id: &str) -> anyhow::Result<Option<String>> {
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         let mut rows = conn
             .query(
                 "SELECT global_channel_id FROM guild WHERE id = ?1 LIMIT 1",
@@ -385,31 +331,12 @@ impl AlyaDatabase {
         let sql = "INSERT INTO guild (id, global_channel_id, global_webhook_id, global_webhook_token, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET global_channel_id = excluded.global_channel_id, global_webhook_id = excluded.global_webhook_id, global_webhook_token = excluded.global_webhook_token, updated_at = CURRENT_TIMESTAMP";
 
-        let webhook_id = webhook_id.map(|s| s.to_string());
-        let webhook_token = webhook_token.map(|s| s.to_string());
-
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         conn.execute(
             sql,
-            params![
-                guild_id,
-                channel_id,
-                webhook_id.clone(),
-                webhook_token.clone()
-            ],
+            params![guild_id, channel_id, webhook_id, webhook_token],
         )
         .await?;
-
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn
-                    .execute(
-                        sql,
-                        params![guild_id, channel_id, webhook_id, webhook_token],
-                    )
-                    .await;
-            }
-        }
 
         Ok(())
     }
@@ -417,14 +344,8 @@ impl AlyaDatabase {
     pub async fn delete_global_chat_channel(&self, guild_id: &str) -> anyhow::Result<()> {
         let sql = "UPDATE guild SET global_channel_id = NULL, global_webhook_id = NULL, global_webhook_token = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?1";
 
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         conn.execute(sql, params![guild_id]).await?;
-
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn.execute(sql, params![guild_id]).await;
-            }
-        }
 
         Ok(())
     }
@@ -432,13 +353,13 @@ impl AlyaDatabase {
     pub async fn get_all_global_chat(
         &self,
     ) -> anyhow::Result<Vec<(String, String, Option<String>, Option<String>)>> {
-        let conn = self.local.connect()?;
-        let mut rows = conn
-            .query(
+        let conn = self.db.connect()?;
+        let stmt = conn
+            .prepare(
                 "SELECT id, global_channel_id, global_webhook_id, global_webhook_token FROM guild WHERE global_channel_id IS NOT NULL",
-                (),
             )
             .await?;
+        let mut rows = stmt.query(()).await?;
 
         let mut result = Vec::new();
         while let Some(row) = rows.next().await? {
@@ -511,26 +432,26 @@ impl AlyaDatabase {
 
     pub async fn has_active_premium(&self, user_id: &str) -> anyhow::Result<bool> {
         let now_iso = Self::now_iso();
-        let conn = self.local.connect()?;
-        let mut rows = conn
-            .query(
+        let conn = self.db.connect()?;
+        let stmt = conn
+            .prepare(
                 "SELECT 1 FROM user_vote WHERE user_id = ?1 AND datetime(expires_at) > datetime(?2) LIMIT 1",
-                params![user_id, now_iso],
             )
             .await?;
+        let mut rows = stmt.query(params![user_id, now_iso]).await?;
 
         Ok(rows.next().await?.is_some())
     }
 
     pub async fn get_premium_time_remaining(&self, user_id: &str) -> anyhow::Result<Option<u64>> {
         let now_iso = Self::now_iso();
-        let conn = self.local.connect()?;
-        let mut rows = conn
-            .query(
+        let conn = self.db.connect()?;
+        let stmt = conn
+            .prepare(
                 "SELECT expires_at FROM user_vote WHERE user_id = ?1 AND datetime(expires_at) > datetime(?2) ORDER BY datetime(expires_at) DESC LIMIT 1",
-                params![user_id, now_iso],
             )
             .await?;
+        let mut rows = stmt.query(params![user_id, now_iso]).await?;
 
         if let Some(row) = rows.next().await? {
             let expires_at: String = row.get(0)?;
@@ -544,46 +465,27 @@ impl AlyaDatabase {
     }
 
     pub async fn clear_vote_data(&self, user_id: &str) -> anyhow::Result<()> {
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         conn.execute("DELETE FROM user_vote WHERE user_id = ?1", params![user_id])
             .await?;
-
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn
-                    .execute("DELETE FROM user_vote WHERE user_id = ?1", params![user_id])
-                    .await;
-            }
-        }
 
         Ok(())
     }
 
     pub async fn clear_premium_data(&self, user_id: &str) -> anyhow::Result<()> {
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         conn.execute(
             "DELETE FROM user_vote WHERE user_id = ?1 AND vote_type = 'regular'",
             params![user_id],
         )
         .await?;
 
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn
-                    .execute(
-                        "DELETE FROM user_vote WHERE user_id = ?1 AND vote_type = 'regular'",
-                        params![user_id],
-                    )
-                    .await;
-            }
-        }
-
         Ok(())
     }
 
     pub async fn cleanup_expired_votes(&self) -> anyhow::Result<u64> {
         let now_iso = Self::now_iso();
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         let result = conn
             .execute(
                 "DELETE FROM user_vote WHERE datetime(expires_at) <= datetime(?1)",
@@ -591,22 +493,11 @@ impl AlyaDatabase {
             )
             .await?;
 
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn
-                    .execute(
-                        "DELETE FROM user_vote WHERE datetime(expires_at) <= datetime(?1)",
-                        params![Self::now_iso()],
-                    )
-                    .await;
-            }
-        }
-
         Ok(result)
     }
 
     pub async fn get_vote_stats(&self, user_id: Option<&str>) -> anyhow::Result<VoteStats> {
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
 
         let (total_sql, active_sql) = if user_id.is_some() {
             (
@@ -661,7 +552,7 @@ impl AlyaDatabase {
         let now_iso = Self::now_iso();
 
         if let Some(uid) = user_id {
-            let conn = self.local.connect()?;
+            let conn = self.db.connect()?;
             let mut rows = conn
                 .query(
                     "SELECT vote_type, expires_at FROM user_vote WHERE user_id = ?1 AND datetime(expires_at) > datetime(?2) ORDER BY datetime(expires_at) DESC LIMIT 1",
@@ -687,7 +578,7 @@ impl AlyaDatabase {
             });
         }
 
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         let mut rows = conn
             .query(
                 "SELECT COUNT(*) FROM user_vote WHERE vote_type = 'regular' AND datetime(expires_at) > datetime(?1)",
@@ -731,23 +622,12 @@ impl AlyaDatabase {
         let voted_at = Utc::now().to_rfc3339();
         let expires_iso = expires_at.to_rfc3339();
 
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         conn.execute(
             "INSERT INTO user_vote (id, user_id, voted_at, expires_at, vote_type) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![id.clone(), user_id, voted_at.clone(), expires_iso.clone(), vote_type],
+            params![id, user_id, voted_at, expires_iso, vote_type],
         )
         .await?;
-
-        if let Some(remote) = &self.remote {
-            if let Ok(conn) = remote.connect() {
-                let _ = conn
-                    .execute(
-                        "INSERT INTO user_vote (id, user_id, voted_at, expires_at, vote_type) VALUES (?1, ?2, ?3, ?4, ?5)",
-                        params![id, user_id, voted_at, expires_iso, vote_type],
-                    )
-                    .await;
-            }
-        }
 
         Ok(())
     }
@@ -758,7 +638,7 @@ impl AlyaDatabase {
         vote_type: &str,
         now_iso: &str,
     ) -> anyhow::Result<Option<(String, String)>> {
-        let conn = self.local.connect()?;
+        let conn = self.db.connect()?;
         let mut rows = conn
             .query(
                 "SELECT expires_at, vote_type FROM user_vote WHERE user_id = ?1 AND vote_type = ?2 AND datetime(expires_at) > datetime(?3) ORDER BY datetime(expires_at) DESC LIMIT 1",

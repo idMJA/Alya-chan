@@ -1,13 +1,19 @@
 use crate::database::service::AlyaDatabase;
 use crate::types::error::BotError;
 use crate::types::{BotResult, EventContext};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde_json::json;
+use std::collections::HashMap;
 use std::fs;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use twilight_model::gateway::payload::incoming::MessageCreate;
 
 const MAX_HISTORY_MESSAGES: usize = 10;
 const HISTORY_TTL_MINUTES: i64 = 10;
+
+// In-memory chat history storage
+type ChatHistory = Arc<RwLock<HashMap<String, Vec<(String, String, DateTime<Utc>)>>>>;
 
 fn load_alya_system_message() -> String {
     match fs::read_to_string("src/models/alya-multi.txt") {
@@ -77,30 +83,34 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
 
     let system_message = load_alya_system_message();
 
-    // Get singleton store (initialized in main.rs)
-    let store = AlyaDatabase::get_store()
-        .await
-        .map_err(|e| BotError::Other(e.to_string()))?;
+    // Use in-memory chat history (no DB persistence)
+    static CHAT_HISTORY: tokio::sync::OnceCell<ChatHistory> = tokio::sync::OnceCell::const_new();
+    let history_store = CHAT_HISTORY
+        .get_or_init(|| async { Arc::new(RwLock::new(HashMap::new())) })
+        .await;
 
-    // Fetch recent history (local first)
+    // Fetch recent history from memory
     let mut messages = vec![json!({
         "role": "system",
         "content": system_message
     })];
 
-    if let Ok(history) = store
-        .fetch_recent(
-            &msg.author.id.to_string(),
-            HISTORY_TTL_MINUTES,
-            MAX_HISTORY_MESSAGES,
-        )
-        .await
+    let user_key = msg.author.id.to_string();
+    let cutoff_time = Utc::now() - chrono::Duration::minutes(HISTORY_TTL_MINUTES);
+
     {
-        for (role, content) in history {
-            messages.push(json!({
-                "role": role,
-                "content": content
-            }));
+        let history_map = history_store.read().await;
+        if let Some(user_history) = history_map.get(&user_key) {
+            for (role, content, timestamp) in
+                user_history.iter().rev().take(MAX_HISTORY_MESSAGES).rev()
+            {
+                if *timestamp > cutoff_time {
+                    messages.push(json!({
+                        "role": role,
+                        "content": content
+                    }));
+                }
+            }
         }
     }
 
@@ -124,16 +134,14 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         "content": user_message_content
     }));
 
-    // Persist user message (local then remote)
-    let _ = store
-        .append_message(
-            &msg.author.id.to_string(),
-            &guild_id.to_string(),
-            "user",
-            &user_message_content,
-            now,
-        )
-        .await;
+    // Store user message in memory
+    {
+        let mut history_map = history_store.write().await;
+        history_map
+            .entry(user_key.clone())
+            .or_insert_with(Vec::new)
+            .push(("user".to_string(), user_message_content.clone(), now));
+    }
 
     let _ = ctx.bot.http.create_typing_trigger(msg.channel_id).await;
 
@@ -179,15 +187,14 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
                 {
                     let messages = split_message(reply, 2000);
 
-                    let _ = store
-                        .append_message(
-                            &msg.author.id.to_string(),
-                            &guild_id.to_string(),
-                            "assistant",
-                            reply,
-                            Utc::now(),
-                        )
-                        .await;
+                    // Store assistant response in memory
+                    {
+                        let mut history_map = history_store.write().await;
+                        history_map
+                            .entry(user_key.clone())
+                            .or_insert_with(Vec::new)
+                            .push(("assistant".to_string(), reply.to_string(), Utc::now()));
+                    }
 
                     for message_part in messages {
                         let _ = ctx.bot.http.create_typing_trigger(msg.channel_id).await;

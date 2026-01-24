@@ -26,12 +26,10 @@ impl EventHandler for MessageCreateHandler {
                 msg.content
             );
 
-            // Handle chatbot responses
             if let Err(e) = handle_chatbot(ctx, msg).await {
                 tracing::warn!("Chatbot handler error: {:?}", e);
             }
 
-            // Handle global chat broadcasting
             if let Err(e) = handle_global_chat(ctx, msg).await {
                 tracing::warn!("Global chat handler error: {:?}", e);
             }

@@ -18,16 +18,28 @@ banner = "https://i.ibb.co/hrpKCdy/e1da98e96fdfc12635909f99725d971e.png"
 [global_chat] # Internal global chat configuration
 # Enable or disable the global chat feature
 enabled = false
-
 # URL of the global chat API server
 api_url = "http://localhost:4000"
-
 # API key for authentication (sent as Authorization: Bearer <key>)
 api_key = "your_global_chat_api_key_here"
 
 [chatbot]
 # Enable or disable the chatbot feature
 enabled = false
-
 # OpenRouter API key (get from https://openrouter.ai/keys)
 api_key = "your_openrouter_api_key_here"
+
+[top-gg]
+# Enable or disable Top.gg stats posting
+enabled = false
+# Top.gg bot token (get from https://top.gg/bot/<your-bot-id>/dashboard/integrations)
+token = "your-topgg-token-here"
+
+[database]
+# Local SQLite database path (defaults to "data/alya.db" if not specified)
+local_path = "data/alya.db"
+# Turso remote database URL (For hybrid mode with replication)
+# Get from https://turso.tech/
+remote_url = "libsql://xxxx.turso.io"
+# Turso authentication token (required if remote_url is set)
+remote_token = "your_turso_auth_token_here"
