@@ -1,5 +1,7 @@
 use crate::config::EmojiConfig;
-use crate::types::{BotResult, ComponentContext, ComponentHandler, SlashCommand, SlashCommandContext};
+use crate::types::{
+    BotResult, ComponentContext, ComponentHandler, SlashCommand, SlashCommandContext,
+};
 use async_trait::async_trait;
 use twilight_model::channel::message::component::{ActionRow, Button, ButtonStyle, Component};
 use twilight_model::http::interaction::{
@@ -37,34 +39,30 @@ impl AboutCommand {
         EmbedBuilder::new()
             .color(color)
             .title("Alya Contributors")
-            .description(
-                format!(
-                    "{info} **Special Thanks**\n\n\
+            .description(format!(
+                "{info} **Special Thanks**\n\n\
                     - iaMJ: Creator of Alya\n\
                     - Tronix Development & community supporters\n\n\
                     {link} **License**\n\
                     This project is licensed under the GNU Affero General Public License v3.0\n\
                     [View License](https://github.com/idMJA/Alya-chan/blob/master/LICENSE)",
-                    info = emoji.info,
-                    link = emoji.link,
-                ),
-            )
+                info = emoji.info,
+                link = emoji.link,
+            ))
     }
 
     fn create_packages_embed(color: u32, emoji: &EmojiConfig) -> EmbedBuilder {
         EmbedBuilder::new()
             .color(color)
             .title("Alya Packages & Runtime")
-            .description(
-                format!(
-                    "{list} **Core Libraries**\n\n\
+            .description(format!(
+                "{list} **Core Libraries**\n\n\
                     - **[Twilight](https://twilight.rs)** - Discord API library\n\
                     - **[Tokio](https://tokio.rs)** - Async runtime\n\
                     - **[libsql](https://github.com/tursodatabase/libsql)** - SQLite + Turso\n\
                     - **[Tracing](https://github.com/tokio-rs/tracing)** - Structured logging",
-                    list = emoji.list,
-                ),
-            )
+                list = emoji.list,
+            ))
     }
 
     fn create_button_row(active_button: &str) -> Component {
