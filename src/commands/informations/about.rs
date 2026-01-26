@@ -66,7 +66,6 @@ impl AboutCommand {
     }
 
     fn create_button_row(active_button: &str) -> Component {
-        // Create buttons using Components v2 structure with proper styling
         let button_about = Component::Button(Button {
             custom_id: Some("about_btn_about".to_owned()),
             disabled: active_button == "about",
@@ -112,7 +111,6 @@ impl AboutCommand {
             sku_id: None,
         });
 
-        // Wrap buttons into ActionRow (Components v2)
         Component::ActionRow(ActionRow {
             id: None,
             components: vec![button_about, button_contributors, button_packages],
@@ -158,7 +156,6 @@ impl SlashCommand for AboutCommand {
     }
 }
 
-// Button handler integrated in the same file (like TypeScript version)
 pub struct AboutButton;
 
 #[async_trait]
@@ -170,12 +167,10 @@ impl ComponentHandler for AboutButton {
     async fn handle(&self, ctx: &ComponentContext) -> BotResult<()> {
         let interaction = &ctx.interaction;
 
-        // Extract data from interaction
         let application_id = interaction.application_id;
         let interaction_id = interaction.id;
         let token = interaction.token.clone();
 
-        // Get custom_id from message component data
         let custom_id = match &interaction.data {
             Some(twilight_model::application::interaction::InteractionData::MessageComponent(
                 data,

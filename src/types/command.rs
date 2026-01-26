@@ -1,8 +1,10 @@
 use super::{BotContext, BotResult};
 use async_trait::async_trait;
+use twilight_model::application::command::{Command, CommandType};
 use twilight_model::application::interaction::application_command::CommandData;
 use twilight_model::id::marker::{GuildMarker, UserMarker};
 use twilight_model::id::Id;
+use twilight_util::builder::command::CommandBuilder;
 
 pub struct SlashCommandContext {
     pub bot: BotContext,
@@ -50,6 +52,10 @@ pub trait SlashCommand: Send + Sync {
     fn name(&self) -> &str;
 
     fn description(&self) -> &str;
+
+    fn build(&self) -> Command {
+        CommandBuilder::new(self.name(), self.description(), CommandType::ChatInput).build()
+    }
 
     fn metadata(&self) -> CommandMeta {
         CommandMeta {

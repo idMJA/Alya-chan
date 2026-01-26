@@ -14,8 +14,16 @@ impl EventManager {
     }
 
     pub fn register(&mut self, handler: Arc<dyn EventHandler>) {
-        tracing::info!("Registered event handler: {}", handler.name());
         self.handlers.push(handler);
+    }
+
+    pub fn log_summary(&self) {
+        let handler_names: Vec<&str> = self.handlers.iter().map(|h| h.name()).collect();
+        tracing::info!(
+            "Registered {} event handlers: {}",
+            self.handlers.len(),
+            handler_names.join(", ")
+        );
     }
 
     pub async fn process_event(&self, bot: BotContext, event: Event) -> BotResult<()> {

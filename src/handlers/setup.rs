@@ -19,6 +19,7 @@ impl HandlersSetup {
         // Setup command manager
         let mut cmd_mgr = CommandManager::new();
         setup_commands(&mut cmd_mgr);
+        cmd_mgr.log_summary();
         let cmd_mgr = Arc::new(cmd_mgr);
 
         // Setup help command dengan manager reference
@@ -29,6 +30,7 @@ impl HandlersSetup {
         evt_mgr.register(Arc::new(ReadyHandler));
         evt_mgr.register(Arc::new(MessageCreateHandler));
         evt_mgr.register(Arc::new(GuildCreateHandler));
+        evt_mgr.log_summary();
         let evt_mgr = Arc::new(evt_mgr);
 
         // Setup component manager
@@ -44,6 +46,7 @@ impl HandlersSetup {
         comp_manager.register(Arc::new(
             crate::components::buttons::paginator::PaginatorButton::new(Arc::clone(&cmd_mgr)),
         ));
+        comp_manager.log_summary();
 
         let comp_mgr = Arc::new(comp_manager);
 

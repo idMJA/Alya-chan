@@ -27,12 +27,6 @@ impl CommandManager {
             .entry(category_string.clone())
             .or_default()
             .push(name.clone());
-
-        tracing::info!(
-            "Registered slash command: {} (category: {})",
-            name,
-            category_string
-        );
     }
 
     pub fn get(&self, name: &str) -> Option<&Arc<dyn SlashCommand>> {
@@ -68,6 +62,13 @@ impl CommandManager {
             .values()
             .map(|(cmd, _)| cmd.metadata())
             .collect()
+    }
+
+    pub fn log_summary(&self) {
+        tracing::info!("Registered {} slash commands", self.commands.len());
+        for (category, names) in &self.commands_by_category {
+            tracing::info!("  {} [{}]: {}", category, names.len(), names.join(", "));
+        }
     }
 
     #[allow(dead_code)]

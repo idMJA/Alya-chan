@@ -35,7 +35,6 @@ impl SlashCommand for ChatbotCommand {
             }
         };
 
-        // Parse channel option (optional). If not provided, create a new channel.
         let channel_id_opt = ctx.data.options.iter().find_map(|opt| {
             if opt.name == "channel" {
                 match &opt.value {
@@ -60,7 +59,6 @@ impl SlashCommand for ChatbotCommand {
 
         match db.get_chatbot_setup(&guild_id.to_string()).await {
             Ok(Some(existing)) => {
-                // Show status with delete option using embed
                 let channel_id_num = existing.channel_id.parse::<u64>().unwrap_or(0);
 
                 let status_embed = EmbedBuilder::new()
@@ -122,7 +120,6 @@ impl SlashCommand for ChatbotCommand {
             _ => {}
         }
 
-        // Defer reply for creation flow
         ctx.bot
             .http
             .interaction(ctx.application_id.cast())
@@ -139,20 +136,16 @@ impl SlashCommand for ChatbotCommand {
             )
             .await?;
 
-        // Resolve channel: use provided or create new one
         let channel_id = if let Some(cid) = channel_id_opt {
             cid
         } else {
-            // Create new channel with permission overwrites
             let bot_id = match ctx.bot.cache.current_user() {
                 Some(user) => user.id,
                 None => ctx.application_id.cast(),
             };
 
-            // Get @everyone role ID (same as guild ID)
             let everyone_role_id = guild_id;
 
-            // Permission overwrites
             let permission_overwrites = vec![
                 PermissionOverwrite {
                     id: bot_id.cast(),
@@ -195,7 +188,6 @@ impl SlashCommand for ChatbotCommand {
                 .await;
         }
 
-        // Send success response with aesthetic embed
         let success_embed = EmbedBuilder::new()
             .color(ctx.bot.config.color.primary)
             .title(&format!("{} Chatbot Setup Complete", ctx.bot.config.emoji.yes))

@@ -16,6 +16,7 @@ use twilight_gateway::{Config as GatewayConfig, Event, EventTypeFlags, Shard, Sh
 use twilight_http::Client as HttpClient;
 use twilight_standby::Standby;
 
+use crate::commands::HelpCommand;
 use crate::config::Config;
 use crate::database::service::AlyaDatabase;
 use handlers::{get_default_intents, HandlersSetup};
@@ -100,7 +101,7 @@ async fn main() -> Result<()> {
     let handlers = HandlersSetup::new();
 
     let cmd_mgr = Arc::clone(&handlers.command_manager);
-    let help_cmd_clone = Arc::clone(&handlers.help_command);
+    let help_cmd_clone: Arc<HelpCommand> = Arc::clone(&handlers.help_command);
     let event_manager = Arc::clone(&handlers.event_manager);
     let component_manager = Arc::clone(&handlers.component_manager);
 

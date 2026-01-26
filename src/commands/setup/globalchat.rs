@@ -1,15 +1,8 @@
-use crate::database::service::AlyaDatabase;
 use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
-use serde_json::json;
 use twilight_model::{
     channel::message::component::{ActionRow, Button, ButtonStyle, Component},
     channel::message::MessageFlags,
-    channel::{
-        permission_overwrite::{PermissionOverwrite, PermissionOverwriteType},
-        ChannelType,
-    },
-    guild::Permissions,
     http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
 };
 use twilight_util::builder::embed::EmbedBuilder;
@@ -27,7 +20,6 @@ impl SlashCommand for GlobalChatCommand {
     }
 
     async fn execute(&self, ctx: &SlashCommandContext) -> BotResult<()> {
-        // Check if global chat is configured
         let gc_config = match &ctx.bot.config.global_chat {
             Some(gc) if gc.enabled => gc,
             _ => {
@@ -46,7 +38,6 @@ impl SlashCommand for GlobalChatCommand {
             }
         };
 
-        // Prepare headers for API calls
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::CONTENT_TYPE,
@@ -59,7 +50,6 @@ impl SlashCommand for GlobalChatCommand {
             );
         }
 
-        // Check if guild is already registered
         let client = reqwest::Client::new();
         let list_response = client
             .get(format!("{}/list", gc_config.api_url))
@@ -73,7 +63,6 @@ impl SlashCommand for GlobalChatCommand {
             .await
             .map_err(|e| crate::types::error::BotError::Other(e.to_string()))?;
 
-        // Parse response: data.guilds[...] with id and globalChannelId
         let existing_channel_id = list_data
             .get("data")
             .and_then(|data| data.get("guilds"))
@@ -94,7 +83,6 @@ impl SlashCommand for GlobalChatCommand {
                     })
             });
 
-        // Show status menu with embed (aesthetic design)
         let status_embed = if let Some(ref channel_id) = existing_channel_id {
             EmbedBuilder::new()
                 .color(ctx.bot.config.color.primary)
@@ -131,11 +119,9 @@ impl SlashCommand for GlobalChatCommand {
                 .build()
         };
 
-        // Create action button
         let action_row = Component::ActionRow(ActionRow {
             id: None,
             components: if existing_channel_id.is_some() {
-                // Show delete button if already registered
                 vec![Component::Button(Button {
                     custom_id: Some(format!("setup_del_globalchat_confirm:{}", guild_id)),
                     disabled: false,
@@ -147,7 +133,6 @@ impl SlashCommand for GlobalChatCommand {
                     sku_id: None,
                 })]
             } else {
-                // Show create button if not registered
                 vec![Component::Button(Button {
                     custom_id: Some(format!("globalchat_create:{}", guild_id)),
                     disabled: false,

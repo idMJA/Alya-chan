@@ -15,11 +15,20 @@ impl ComponentManager {
 
     #[allow(dead_code)]
     pub fn register(&mut self, handler: Arc<dyn ComponentHandler>) {
-        tracing::info!(
-            "Registered component handler: {}",
-            handler.custom_id_pattern()
-        );
         self.handlers.push(handler);
+    }
+
+    pub fn log_summary(&self) {
+        let patterns: Vec<&str> = self
+            .handlers
+            .iter()
+            .map(|h| h.custom_id_pattern())
+            .collect();
+        tracing::info!(
+            "Registered {} component handlers: {}",
+            self.handlers.len(),
+            patterns.join(", ")
+        );
     }
 
     pub async fn process_interaction(

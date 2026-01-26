@@ -3,9 +3,7 @@ use crate::types::{BotResult, EventContext, EventHandler};
 use crate::utils::constants::BOT_VERSION;
 use crate::utils::topgg::TopGgPoster;
 use async_trait::async_trait;
-use twilight_model::application::command::CommandType;
 use twilight_model::gateway::event::Event;
-use twilight_util::builder::command::CommandBuilder;
 
 pub struct ReadyHandler;
 
@@ -25,13 +23,7 @@ impl ReadyHandler {
         // Build all commands using CommandBuilder
         let mut built_commands = Vec::new();
         for command in commands {
-            let command_data = CommandBuilder::new(
-                command.name(),
-                command.description(),
-                CommandType::ChatInput,
-            )
-            .build();
-            built_commands.push(command_data);
+            built_commands.push(command.build());
         }
 
         // Register all commands at once (idempotent)

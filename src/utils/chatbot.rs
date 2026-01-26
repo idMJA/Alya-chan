@@ -51,7 +51,20 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         .await
         .map_err(|e| BotError::Other(e.to_string()))?;
 
+    tracing::debug!(
+        "Chatbot setup for guild {}: {:?}",
+        guild_id,
+        setup.is_some()
+    );
+
     let is_alya_mentioned = msg.content.to_lowercase().contains("alya");
+    tracing::debug!(
+        "Message from {} in channel {}: alya_mentioned={}, has_setup={}",
+        msg.author.id,
+        msg.channel_id,
+        is_alya_mentioned,
+        setup.is_some()
+    );
 
     let is_bot_mentioned = if let Some(bot_user) = ctx.bot.cache.current_user() {
         msg.mentions.iter().any(|u| u.id == bot_user.id)
@@ -70,10 +83,19 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
     };
 
     let should_respond = if is_alya_mentioned || is_bot_mentioned || is_replying_to_bot {
+        tracing::debug!("Responding: mentioned or replied");
         true
     } else if let Some(existing) = &setup {
-        existing.channel_id == msg.channel_id.to_string()
+        let channel_match = existing.channel_id == msg.channel_id.to_string();
+        tracing::debug!(
+            "Channel check: stored='{}', msg='{}', match={}",
+            existing.channel_id,
+            msg.channel_id,
+            channel_match
+        );
+        channel_match
     } else {
+        tracing::debug!("No setup found, no mentions/replies - skipping");
         false
     };
 
