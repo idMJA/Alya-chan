@@ -24,6 +24,17 @@ heart = "<:heart:1430942635564077128>"
 folder = "<:folder:1430942669617631272>"
 robot = "<:robot:1464918491902644363> "
 arrow_right = "<:arrow_right:1464918581840973957>"
+newspaper = "<:newspaper:1466479126092189706>"
+settings = "<:settings:1466479182392463492>"
+chat = "<:chat:1466479239439323371>"
+office = "<:office:1466479087915892884>"
+ribbon = "<:ribbon:1466479033108795514>"
+
+# Icon
+twilight = "<:twilight:1466480156473430182>"
+tokio = "<:tokio:1466480102438207673>"
+libsql = "<:libsql:1466480172252397776>"
+tracing = "<:tracing:1466480088982880344>"
 
 # Playback Control Emojis
 play = "<:play:1430942680698982461>"

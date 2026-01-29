@@ -89,6 +89,16 @@ pub struct EmojiConfig {
     pub node_off: String,
     pub robot: String,
     pub arrow_right: String,
+    pub newspaper: String,
+    pub settings: String,
+    pub chat: String,
+    pub office: String,
+    pub ribbon: String,
+    pub twilight: String,
+    pub tokio: String,
+    pub libsql: String,
+    pub tracing: String,
+    pub world: String,
 }
 
 #[derive(Deserialize)]
@@ -176,6 +186,18 @@ struct RawEmoji {
     trash: Option<String>,
     node_on: Option<String>,
     node_off: Option<String>,
+    robot: Option<String>,
+    arrow_right: Option<String>,
+    newspaper: Option<String>,
+    settings: Option<String>,
+    chat: Option<String>,
+    office: Option<String>,
+    ribbon: Option<String>,
+    twilight: Option<String>,
+    tokio: Option<String>,
+    libsql: Option<String>,
+    tracing: Option<String>,
+    world: Option<String>,
 }
 
 impl Config {
@@ -310,6 +332,42 @@ impl Config {
             }
             if let Some(s) = r.node_off {
                 emoji.node_off = s
+            }
+            if let Some(s) = r.robot {
+                emoji.robot = s
+            }
+            if let Some(s) = r.arrow_right {
+                emoji.arrow_right = s
+            }
+            if let Some(s) = r.newspaper {
+                emoji.newspaper = s
+            }
+            if let Some(s) = r.settings {
+                emoji.settings = s
+            }
+            if let Some(s) = r.chat {
+                emoji.chat = s
+            }
+            if let Some(s) = r.office {
+                emoji.office = s
+            }
+            if let Some(s) = r.ribbon {
+                emoji.ribbon = s
+            }
+            if let Some(s) = r.twilight {
+                emoji.twilight = s
+            }
+            if let Some(s) = r.tokio {
+                emoji.tokio = s
+            }
+            if let Some(s) = r.libsql {
+                emoji.libsql = s
+            }
+            if let Some(s) = r.tracing {
+                emoji.tracing = s
+            }
+            if let Some(s) = r.world {
+                emoji.world = s
             }
         }
 
@@ -570,6 +628,42 @@ fn load_emoji_overrides(cfg: &mut Config) {
             }
             if let Some(s) = r.node_off {
                 cfg.emoji.node_off = s
+            }
+            if let Some(s) = r.robot {
+                cfg.emoji.robot = s
+            }
+            if let Some(s) = r.arrow_right {
+                cfg.emoji.arrow_right = s
+            }
+            if let Some(s) = r.newspaper {
+                cfg.emoji.newspaper = s
+            }
+            if let Some(s) = r.settings {
+                cfg.emoji.settings = s
+            }
+            if let Some(s) = r.chat {
+                cfg.emoji.chat = s
+            }
+            if let Some(s) = r.office {
+                cfg.emoji.office = s
+            }
+            if let Some(s) = r.ribbon {
+                cfg.emoji.ribbon = s
+            }
+            if let Some(s) = r.twilight {
+                cfg.emoji.twilight = s
+            }
+            if let Some(s) = r.tokio {
+                cfg.emoji.tokio = s
+            }
+            if let Some(s) = r.libsql {
+                cfg.emoji.libsql = s
+            }
+            if let Some(s) = r.tracing {
+                cfg.emoji.tracing = s
+            }
+            if let Some(s) = r.world {
+                cfg.emoji.world = s
             }
         }
     }
