@@ -6,7 +6,9 @@ use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
 use twilight_util::builder::command::{CommandBuilder, StringBuilder, UserBuilder};
-use twilight_util::builder::embed::{EmbedBuilder, EmbedFooterBuilder, ImageSource};
+use twilight_model::channel::message::component::{
+    Component, Container, MediaGallery, MediaGalleryItem, Separator, SeparatorSpacingSize, TextDisplay, UnfurledMediaItem
+};
 use url::form_urlencoded;
 
 pub struct FakeTweetCommand;
@@ -86,16 +88,45 @@ impl SlashCommand for FakeTweetCommand {
             enc(&tweet),
         );
 
-        let embed = EmbedBuilder::new()
-            .color(ctx.bot.config.color.primary)
-            .title(format!("{}'s Tweet", display_name))
-            .description(tweet.clone())
-            .image(ImageSource::url(image_url).expect("validated url for tweet canvas"))
-            .footer(EmbedFooterBuilder::new(format!(
-                "Requested by {}",
-                username
-            )))
-            .build();
+        let container = Container {
+            id: None,
+            components: vec![
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("## {}'s Tweet", display_name),
+                }),
+                Component::Separator(Separator {
+                    id: None,
+                    divider: Some(true),
+                    spacing: None,
+                }),
+                Component::MediaGallery(MediaGallery {
+                    id: None,
+                    items: vec![MediaGalleryItem {
+                        media: UnfurledMediaItem{
+                            url: image_url.clone(),
+                            content_type: None,
+                            height: None,
+                            width: None,
+                            proxy_url: None,
+                        },
+                        description: Some(tweet.clone()),
+                        spoiler: None,
+                    }],
+                }),
+                Component::Separator(Separator {
+                    id: None,
+                    divider: None,
+                    spacing: Some(SeparatorSpacingSize::Large),
+                }),
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("Requested by {}", username),
+                }),
+            ],
+            accent_color: Some(Some(ctx.bot.config.color.primary)),
+            spoiler: None,
+        };
 
         ctx.bot
             .http
@@ -106,7 +137,8 @@ impl SlashCommand for FakeTweetCommand {
                 &InteractionResponse {
                     kind: InteractionResponseType::ChannelMessageWithSource,
                     data: Some(InteractionResponseData {
-                        embeds: Some(vec![embed]),
+                        components: Some(vec![Component::Container(container)]),
+                        flags: Some(twilight_model::channel::message::MessageFlags::IS_COMPONENTS_V2),
                         ..Default::default()
                     }),
                 },

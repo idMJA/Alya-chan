@@ -4,6 +4,9 @@ use async_trait::async_trait;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::json;
 use twilight_model::application::interaction::InteractionData;
+use twilight_model::channel::message::component::{
+    Component, Container, Separator, SeparatorSpacingSize, TextDisplay,
+};
 use twilight_model::channel::message::MessageFlags;
 use twilight_model::channel::permission_overwrite::{PermissionOverwrite, PermissionOverwriteType};
 use twilight_model::channel::ChannelType;
@@ -11,7 +14,6 @@ use twilight_model::guild::Permissions;
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
-use twilight_util::builder::embed::EmbedBuilder;
 
 pub struct GlobalChatCreateButton;
 
@@ -118,32 +120,45 @@ impl ComponentHandler for GlobalChatCreateButton {
         };
 
         // Send welcome message
-        let welcome_embed = EmbedBuilder::new()
-            .color(ctx.bot.config.color.primary)
-            .title(&format!(
-                "{} Welcome to Global Chat!",
-                ctx.bot.config.emoji.globe
-            ))
-            .description(&format!(
-                "This channel is connected to a network of servers using Alya-chan.\n\
-                Messages sent here will be broadcasted to all connected servers.\n\n\
-                **Rules:**\n\
-                {} Be respectful to all users\n\
-                {} Follow Discord's Terms of Service\n\
-                {} No spam or advertising\n\
-                {} Have fun and make new friends!",
-                ctx.bot.config.emoji.info,
-                ctx.bot.config.emoji.info,
-                ctx.bot.config.emoji.warn,
-                ctx.bot.config.emoji.heart
-            ))
-            .build();
+        let welcome_container = Container {
+            id: None,
+            components: vec![
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("## Welcome to Global Chat!\n{}", ctx.bot.config.emoji.globe),
+                }),
+                Component::Separator(Separator {
+                    id: None,
+                    divider: Some(true),
+                    spacing: None,
+                }),
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!(
+                        "This channel is connected to a network of servers using Alya-chan.\n\
+                        Messages sent here will be broadcasted to all connected servers.\n\n\
+                        **Rules:**\n\
+                        {} Be respectful to all users\n\
+                        {} Follow Discord's Terms of Service\n\
+                        {} No spam or advertising\n\
+                        {} Have fun and make new friends!",
+                        ctx.bot.config.emoji.info,
+                        ctx.bot.config.emoji.info,
+                        ctx.bot.config.emoji.warn,
+                        ctx.bot.config.emoji.heart
+                    ),
+                }),
+            ],
+            accent_color: Some(Some(ctx.bot.config.color.primary)),
+            spoiler: None,
+        };
 
         if let Err(e) = ctx
             .bot
             .http
             .create_message(new_channel.id)
-            .embeds(&[welcome_embed])
+            .components(&[Component::Container(welcome_container)])
+            .flags(MessageFlags::IS_COMPONENTS_V2)
             .await
         {
             return self
@@ -241,16 +256,29 @@ impl ComponentHandler for GlobalChatCreateButton {
             ctx.bot.config.emoji.yes, new_channel.id, ctx.bot.config.emoji.globe
         );
 
-        let success_embed = EmbedBuilder::new()
-            .color(ctx.bot.config.color.primary)
-            .description(success_message)
-            .build();
+        let success_container = Container {
+            id: None,
+            components: vec![
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("## Global Chat Ready\n{}", success_message),
+                }),
+                Component::Separator(Separator {
+                    id: None,
+                    divider: None,
+                    spacing: Some(SeparatorSpacingSize::Large),
+                }),
+            ],
+            accent_color: Some(Some(ctx.bot.config.color.primary)),
+            spoiler: None,
+        };
 
         ctx.bot
             .http
             .interaction(application_id.cast())
             .create_followup(&token)
-            .embeds(&[success_embed])
+            .components(&[Component::Container(success_container)])
+            .flags(MessageFlags::IS_COMPONENTS_V2)
             .await?;
 
         tracing::info!(
@@ -265,10 +293,15 @@ impl ComponentHandler for GlobalChatCreateButton {
 
 impl GlobalChatCreateButton {
     async fn respond_error(&self, ctx: &ComponentContext, message: &str) -> BotResult<()> {
-        let embed = EmbedBuilder::new()
-            .color(ctx.bot.config.color.no)
-            .description(&format!("{} {}", ctx.bot.config.emoji.no, message))
-            .build();
+        let container = Container {
+            id: None,
+            components: vec![Component::TextDisplay(TextDisplay {
+                id: None,
+                content: format!("## Error\n{} {}", ctx.bot.config.emoji.no, message),
+            })],
+            accent_color: Some(Some(ctx.bot.config.color.no)),
+            spoiler: None,
+        };
 
         ctx.bot
             .http
@@ -279,8 +312,8 @@ impl GlobalChatCreateButton {
                 &InteractionResponse {
                     kind: InteractionResponseType::ChannelMessageWithSource,
                     data: Some(InteractionResponseData {
-                        embeds: Some(vec![embed]),
-                        flags: Some(MessageFlags::EPHEMERAL),
+                        components: Some(vec![Component::Container(container)]),
+                        flags: Some(MessageFlags::EPHEMERAL | MessageFlags::IS_COMPONENTS_V2),
                         ..Default::default()
                     }),
                 },
@@ -291,16 +324,22 @@ impl GlobalChatCreateButton {
     }
 
     async fn respond_error_followup(&self, ctx: &ComponentContext, message: &str) -> BotResult<()> {
-        let embed = EmbedBuilder::new()
-            .color(ctx.bot.config.color.no)
-            .description(&format!("{} {}", ctx.bot.config.emoji.no, message))
-            .build();
+        let container = Container {
+            id: None,
+            components: vec![Component::TextDisplay(TextDisplay {
+                id: None,
+                content: format!("## Error\n{} {}", ctx.bot.config.emoji.no, message),
+            })],
+            accent_color: Some(Some(ctx.bot.config.color.no)),
+            spoiler: None,
+        };
 
         ctx.bot
             .http
             .interaction(ctx.interaction.application_id.cast())
             .create_followup(&ctx.interaction.token)
-            .embeds(&[embed])
+            .components(&[Component::Container(container)])
+            .flags(MessageFlags::IS_COMPONENTS_V2)
             .await?;
 
         Ok(())

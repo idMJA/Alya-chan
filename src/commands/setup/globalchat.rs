@@ -1,13 +1,133 @@
 use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
+use tokio::time::{sleep, Duration};
 use twilight_model::{
-    channel::message::component::{ActionRow, Button, ButtonStyle, Component},
+    channel::message::component::{
+        ActionRow, Button, ButtonStyle, Component, Container, Separator, SeparatorSpacingSize,
+        TextDisplay,
+    },
     channel::message::MessageFlags,
     http::interaction::{InteractionResponse, InteractionResponseData, InteractionResponseType},
 };
-use twilight_util::builder::embed::EmbedBuilder;
 
 pub struct GlobalChatCommand;
+
+impl GlobalChatCommand {
+    fn build_action_row(guild_id: u64, registered: bool, expired: bool) -> Component {
+        let (custom_id, label, style) = if registered {
+            (
+                format!("setup_del_globalchat_confirm:{}", guild_id),
+                "Delete Global Chat".to_string(),
+                if expired {
+                    ButtonStyle::Secondary
+                } else {
+                    ButtonStyle::Danger
+                },
+            )
+        } else {
+            (
+                format!("globalchat_create:{}", guild_id),
+                "Create Global Chat".to_string(),
+                if expired {
+                    ButtonStyle::Secondary
+                } else {
+                    ButtonStyle::Primary
+                },
+            )
+        };
+
+        Component::ActionRow(ActionRow {
+            id: None,
+            components: vec![Component::Button(Button {
+                custom_id: Some(custom_id),
+                disabled: expired,
+                label: Some(label),
+                style,
+                emoji: None,
+                url: None,
+                id: None,
+                sku_id: None,
+            })],
+        })
+    }
+
+    fn build_status_container(
+        color: u32,
+        emoji: &crate::config::EmojiConfig,
+        registered: bool,
+        channel_id: Option<&str>,
+    ) -> Container {
+        let (status_emoji, status_text, header_emoji) = if registered {
+            (emoji.yes.as_str(), "Registered", emoji.globe.as_str())
+        } else {
+            (emoji.no.as_str(), "Not Registered", emoji.warn.as_str())
+        };
+
+        let mut details = format!("{} Status: `{}`", status_emoji, status_text);
+
+        if let Some(channel_id) = channel_id {
+            details.push_str(&format!(
+                "\n{} **Channel**: <#{}>",
+                emoji.folder, channel_id
+            ));
+            details.push_str(&format!(
+                "\n{} **Description**: This server is connected to the global chat network. Messages sent in this channel will be broadcasted to all connected servers.",
+                emoji.info
+            ));
+        } else {
+            details.push_str(&format!(
+                "\n{} **What is Global Chat?**: Connect your server to a network of other servers. Share messages across communities and make new friends!",
+                emoji.info
+            ));
+            details.push_str(&format!(
+                "\n{} **Next Step**: Click the button below to set up global chat for your server.",
+                emoji.arrow_right
+            ));
+        }
+
+        Container {
+            id: None,
+            components: vec![
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("## {} Global Chat", header_emoji),
+                }),
+                Component::Separator(Separator {
+                    id: None,
+                    divider: Some(true),
+                    spacing: None,
+                }),
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: details,
+                }),
+                Component::Separator(Separator {
+                    id: None,
+                    divider: None,
+                    spacing: Some(SeparatorSpacingSize::Large),
+                }),
+            ],
+            accent_color: Some(Some(color)),
+            spoiler: None,
+        }
+    }
+
+    fn build_error_container(
+        color: u32,
+        emoji: &crate::config::EmojiConfig,
+        message: &str,
+    ) -> Container {
+        Container {
+            id: None,
+            components: vec![Component::TextDisplay(TextDisplay {
+                id: None,
+                content: format!("## Error\n{} {}", emoji.no, message),
+            })],
+            accent_color: Some(Some(color)),
+            spoiler: None,
+        }
+    }
+}
 
 #[async_trait]
 impl SlashCommand for GlobalChatCommand {
@@ -83,68 +203,15 @@ impl SlashCommand for GlobalChatCommand {
                     })
             });
 
-        let status_embed = if let Some(ref channel_id) = existing_channel_id {
-            EmbedBuilder::new()
-                .color(ctx.bot.config.color.primary)
-                .title(&format!("{} Global Chat Status", ctx.bot.config.emoji.globe))
-                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
-                    &format!("{} Status", ctx.bot.config.emoji.yes),
-                    "**Registered**",
-                ))
-                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
-                    &format!("{} Channel", ctx.bot.config.emoji.folder),
-                    &format!("<#{}>", channel_id),
-                ))
-                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
-                    &format!("{} Description", ctx.bot.config.emoji.info),
-                    "This server is connected to the global chat network. Messages sent in this channel will be broadcasted to all connected servers.",
-                ))
-                .build()
-        } else {
-            EmbedBuilder::new()
-                .color(ctx.bot.config.color.primary)
-                .title(&format!("{} Global Chat Status", ctx.bot.config.emoji.warn))
-                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
-                    &format!("{} Status", ctx.bot.config.emoji.no),
-                    "**Not Registered**",
-                ))
-                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
-                    &format!("{} What is Global Chat?", ctx.bot.config.emoji.info),
-                    "Connect your server to a network of other servers. Share messages across communities and make new friends!",
-                ))
-                .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
-                    &format!("{} Next Step", ctx.bot.config.emoji.arrow_right),
-                    "Click the button below to set up global chat for your server.",
-                ))
-                .build()
-        };
+        let status_container = Self::build_status_container(
+            ctx.bot.config.color.primary,
+            &ctx.bot.config.emoji,
+            existing_channel_id.is_some(),
+            existing_channel_id.as_deref(),
+        );
 
-        let action_row = Component::ActionRow(ActionRow {
-            id: None,
-            components: if existing_channel_id.is_some() {
-                vec![Component::Button(Button {
-                    custom_id: Some(format!("setup_del_globalchat_confirm:{}", guild_id)),
-                    disabled: false,
-                    label: Some("Delete Global Chat".to_string()),
-                    style: ButtonStyle::Danger,
-                    emoji: None,
-                    url: None,
-                    id: None,
-                    sku_id: None,
-                })]
-            } else {
-                vec![Component::Button(Button {
-                    custom_id: Some(format!("globalchat_create:{}", guild_id)),
-                    disabled: false,
-                    label: Some("Create Global Chat".to_string()),
-                    style: ButtonStyle::Primary,
-                    emoji: None,
-                    url: None,
-                    id: None,
-                    sku_id: None,
-                })]
-            },
-        });
+        let action_row =
+            Self::build_action_row(guild_id.get(), existing_channel_id.is_some(), false);
 
         ctx.bot
             .http
@@ -155,14 +222,32 @@ impl SlashCommand for GlobalChatCommand {
                 &InteractionResponse {
                     kind: InteractionResponseType::ChannelMessageWithSource,
                     data: Some(InteractionResponseData {
-                        embeds: Some(vec![status_embed]),
-                        components: Some(vec![action_row]),
-                        flags: Some(MessageFlags::EPHEMERAL),
+                        components: Some(vec![
+                            Component::Container(status_container.clone()),
+                            action_row,
+                        ]),
+                        flags: Some(MessageFlags::EPHEMERAL | MessageFlags::IS_COMPONENTS_V2),
                         ..Default::default()
                     }),
                 },
             )
             .await?;
+
+        let http = ctx.bot.http.clone();
+        let token = ctx.token.clone();
+        let application_id = ctx.application_id;
+        tokio::spawn(async move {
+            sleep(Duration::from_secs(60)).await;
+
+            let expired_button =
+                Self::build_action_row(guild_id.get(), existing_channel_id.is_some(), true);
+            let components = vec![Component::Container(status_container), expired_button];
+            let _ = http
+                .interaction(application_id.cast())
+                .update_response(&token)
+                .components(Some(&components))
+                .await;
+        });
 
         Ok(())
     }
@@ -170,10 +255,8 @@ impl SlashCommand for GlobalChatCommand {
 
 impl GlobalChatCommand {
     async fn respond_error(&self, ctx: &SlashCommandContext, message: &str) -> BotResult<()> {
-        let embed = EmbedBuilder::new()
-            .color(ctx.bot.config.color.no)
-            .description(&format!("{} {}", ctx.bot.config.emoji.no, message))
-            .build();
+        let container =
+            Self::build_error_container(ctx.bot.config.color.no, &ctx.bot.config.emoji, message);
 
         ctx.bot
             .http
@@ -184,32 +267,12 @@ impl GlobalChatCommand {
                 &InteractionResponse {
                     kind: InteractionResponseType::ChannelMessageWithSource,
                     data: Some(InteractionResponseData {
-                        embeds: Some(vec![embed]),
-                        flags: Some(MessageFlags::EPHEMERAL),
+                        components: Some(vec![Component::Container(container)]),
+                        flags: Some(MessageFlags::EPHEMERAL | MessageFlags::IS_COMPONENTS_V2),
                         ..Default::default()
                     }),
                 },
             )
-            .await?;
-
-        Ok(())
-    }
-
-    async fn respond_error_followup(
-        &self,
-        ctx: &SlashCommandContext,
-        message: &str,
-    ) -> BotResult<()> {
-        let embed = EmbedBuilder::new()
-            .color(ctx.bot.config.color.no)
-            .description(&format!("{} {}", ctx.bot.config.emoji.no, message))
-            .build();
-
-        ctx.bot
-            .http
-            .interaction(ctx.application_id.cast())
-            .create_followup(&ctx.token)
-            .embeds(&[embed])
             .await?;
 
         Ok(())

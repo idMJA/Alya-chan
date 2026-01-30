@@ -1,6 +1,6 @@
 use super::{CommandManager, ComponentManager, EventManager};
 use crate::commands::{setup_commands, AboutButton, HelpCommand};
-use crate::components::buttons::{GlobalChatCreateButton, SetupDeleteButton};
+use crate::components::buttons::{ChatbotCreateButton, GlobalChatCreateButton, SetupDeleteButton};
 use crate::events::{GuildCreateHandler, MessageCreateHandler, ReadyHandler};
 use std::sync::Arc;
 use twilight_gateway::Intents;
@@ -39,6 +39,7 @@ impl HandlersSetup {
         // Register component handlers - AboutButton now from commands module
         comp_manager.register(Arc::new(AboutButton));
         comp_manager.register(Arc::new(SetupDeleteButton));
+        comp_manager.register(Arc::new(ChatbotCreateButton));
         comp_manager.register(Arc::new(GlobalChatCreateButton));
         comp_manager.register(Arc::new(
             crate::components::select_menus::help_menu::HelpMenuSelect::new(Arc::clone(&cmd_mgr)),

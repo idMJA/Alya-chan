@@ -6,7 +6,9 @@ use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
 use twilight_util::builder::command::{CommandBuilder, UserBuilder};
-use twilight_util::builder::embed::{EmbedBuilder, EmbedFieldBuilder, EmbedFooterBuilder};
+use twilight_model::channel::message::component::{
+    Component, Container, Separator, SeparatorSpacingSize, TextDisplay,
+};
 use uuid::Uuid;
 
 pub struct HackCommand;
@@ -160,39 +162,56 @@ impl SlashCommand for HackCommand {
             "2222-4000-7000-0005",
         ];
 
-        let embed = EmbedBuilder::new()
-            .color(ctx.bot.config.color.primary)
-            .title(format!("**{}**'s Hacked Data", target_name))
-            .description("🔓 **Mission Complete!** Successfully infiltrated all systems.")
-            .field(EmbedFieldBuilder::new(
-                "🔐 Device Password",
-                format!("`{}`", pick(&device_passwords, seed)),
-            ))
-            .field(EmbedFieldBuilder::new(
-                "🆔 System ID",
-                format!("`{}`", pick(&system_ids, seed / 2)),
-            ))
-            .field(EmbedFieldBuilder::new(
-                "📶 WiFi Access",
-                format!(
-                    "**Network:** {}\n**Password:** `{}`",
-                    pick(&wifi_names, seed / 3),
-                    pick(&wifi_pw, seed / 4)
-                ),
-            ))
-            .field(EmbedFieldBuilder::new(
-                "📍 Location",
-                pick(&locations, seed / 5),
-            ))
-            .field(EmbedFieldBuilder::new("📋 DOB", pick(&dobs, seed / 6)))
-            .field(EmbedFieldBuilder::new(
-                "💳 Credit Card",
-                format!("`{}`", pick(&cc_numbers, seed / 7)),
-            ))
-            .footer(EmbedFooterBuilder::new(
-                "This is completely fake and for entertainment purposes only",
-            ))
-            .build();
+
+        let container = Container {
+            id: None,
+            components: vec![
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("# **{}'s** Hacked Data\n\n🔓 **Mission Complete!** Successfully infiltrated all systems.", target_name),
+                }),
+                Component::Separator(Separator {
+                    id: None,
+                    divider: None,
+                    spacing: Some(SeparatorSpacingSize::Large),
+                }),
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("**🔐 Device Password:**\n`{}`", pick(&device_passwords, seed)),
+                }),
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("**🆔 System ID:**\n`{}`", pick(&system_ids, seed / 2)),
+                }),
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("**📶 WiFi Access:**\n**Network:** {}\n**Password:** `{}`", pick(&wifi_names, seed / 3), pick(&wifi_pw, seed / 4)),
+                }),
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("**📍 Location:**\n{}", pick(&locations, seed / 5)),
+                }),
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("**📋 DOB:**\n{}", pick(&dobs, seed / 6)),
+                }),
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: format!("**💳 Credit Card:**\n`{}`", pick(&cc_numbers, seed / 7)),
+                }),
+                Component::Separator(Separator {
+                    id: None,
+                    divider: None,
+                    spacing: Some(SeparatorSpacingSize::Large),
+                }),
+                Component::TextDisplay(TextDisplay {
+                    id: None,
+                    content: "-# This is completely fake and for entertainment purposes only".to_string(),
+                }),
+            ],
+            accent_color: Some(Some(ctx.bot.config.color.primary)),
+            spoiler: None,
+        };
 
         ctx.bot
             .http
@@ -203,7 +222,8 @@ impl SlashCommand for HackCommand {
                 &InteractionResponse {
                     kind: InteractionResponseType::ChannelMessageWithSource,
                     data: Some(InteractionResponseData {
-                        embeds: Some(vec![embed]),
+                        components: Some(vec![Component::Container(container)]),
+                        flags: Some(twilight_model::channel::message::MessageFlags::IS_COMPONENTS_V2),
                         ..Default::default()
                     }),
                 },

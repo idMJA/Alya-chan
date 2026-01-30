@@ -2,14 +2,12 @@ use crate::types::{BotResult, EventContext};
 use serde_json::json;
 use twilight_model::gateway::payload::incoming::MessageCreate;
 
-/// Build a safe serializable message payload similar to the TS version
 fn build_safe_message(
     msg: &MessageCreate,
     cache: &twilight_cache_inmemory::InMemoryCache,
 ) -> serde_json::Value {
     let author = &msg.author;
 
-    // Resolve guild name from cache if available
     let guild_name = msg
         .guild_id
         .and_then(|gid| cache.guild(gid))
@@ -79,12 +77,10 @@ fn build_safe_message(
     })
 }
 
-/// Handle global chat broadcast for a message
 pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotResult<()> {
-    // Check if global chat is enabled in config
     let gc_config = match &ctx.bot.config.global_chat {
         Some(gc) if gc.enabled => gc,
-        _ => return Ok(()), // Global chat disabled or not configured
+        _ => return Ok(()),
     };
 
     if msg.author.bot {
@@ -169,7 +165,6 @@ pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotR
                     tracing::warn!("Failed guilds: {}", names);
                 }
 
-                // Attempt to fix failed guilds asynchronously
                 let failed_guilds = failed.to_vec();
                 let http = ctx.bot.http.clone();
                 let api_url = gc_config.api_url.clone();
@@ -199,7 +194,6 @@ pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotR
                     tracing::error!("Failed guilds: {}", errs);
                 }
 
-                // Attempt to fix failed guilds asynchronously
                 let failed_guilds = failed.to_vec();
                 let http = ctx.bot.http.clone();
                 let api_url = gc_config.api_url.clone();
@@ -232,7 +226,6 @@ pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotR
     Ok(())
 }
 
-/// Handle failed guilds by attempting to recreate webhooks
 async fn handle_failed_guilds(
     failed_guilds: &[serde_json::Value],
     http: &std::sync::Arc<twilight_http::Client>,
@@ -259,7 +252,6 @@ async fn handle_failed_guilds(
         //     guild_id_str
         // );
 
-        // Fetch guild info from API
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("Content-Type", "application/json".parse().unwrap());
         if let Some(key) = &api_key {
@@ -297,7 +289,6 @@ async fn handle_failed_guilds(
             }
         };
 
-        // Find the guild info in the list
         let guild_info = list_data
             .get("data")
             .and_then(|d| d.get("guilds"))
@@ -329,7 +320,6 @@ async fn handle_failed_guilds(
             }
         };
 
-        // Parse channel ID and create webhook
         let channel_id = match global_channel_id.parse::<u64>() {
             Ok(id) => twilight_model::id::Id::new(id),
             Err(_) => {
@@ -342,7 +332,6 @@ async fn handle_failed_guilds(
             }
         };
 
-        // Create webhook
         let webhook_result = http.create_webhook(channel_id, "Alya Global Chat").await;
 
         let webhook_resp = match webhook_result {
@@ -366,7 +355,6 @@ async fn handle_failed_guilds(
             }
         };
 
-        // Update API with new webhook info
         let update_body = json!({
             "guildId": guild_id_str,
             "globalChannelId": global_channel_id,

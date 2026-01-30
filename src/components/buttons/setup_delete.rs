@@ -3,7 +3,10 @@ use crate::types::{error::BotError, BotResult, ComponentContext, ComponentHandle
 use async_trait::async_trait;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use twilight_model::application::interaction::InteractionData;
-use twilight_model::channel::message::component::{ActionRow, Button, ButtonStyle, Component};
+use twilight_model::channel::message::component::{
+    Component, Container, Separator, SeparatorSpacingSize, TextDisplay,
+};
+use twilight_model::channel::message::MessageFlags;
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
@@ -11,56 +14,6 @@ use twilight_model::http::interaction::{
 pub struct SetupDeleteButton;
 
 impl SetupDeleteButton {
-    fn build_static_row(label: &str) -> Component {
-        Component::ActionRow(ActionRow {
-            id: None,
-            components: vec![Component::Button(Button {
-                custom_id: None,
-                disabled: true,
-                label: Some(label.to_string()),
-                style: ButtonStyle::Secondary,
-                emoji: None,
-                url: None,
-                id: None,
-                sku_id: None,
-            })],
-        })
-    }
-
-    fn build_action_row(
-        custom_id_confirm: &str,
-        confirm_label: &str,
-        custom_id_cancel: &str,
-        cancel_label: &str,
-    ) -> Component {
-        let confirm_btn = Component::Button(Button {
-            custom_id: Some(custom_id_confirm.to_string()),
-            disabled: false,
-            label: Some(confirm_label.to_string()),
-            style: ButtonStyle::Danger,
-            emoji: None,
-            url: None,
-            id: None,
-            sku_id: None,
-        });
-
-        let cancel_btn = Component::Button(Button {
-            custom_id: Some(custom_id_cancel.to_string()),
-            disabled: false,
-            label: Some(cancel_label.to_string()),
-            style: ButtonStyle::Secondary,
-            emoji: None,
-            url: None,
-            id: None,
-            sku_id: None,
-        });
-
-        Component::ActionRow(ActionRow {
-            id: None,
-            components: vec![confirm_btn, cancel_btn],
-        })
-    }
-
     async fn delete_chatbot(guild_id: &str) -> BotResult<bool> {
         if let Ok(db) = AlyaDatabase::get() {
             db.delete_chatbot_setup(guild_id)
@@ -127,40 +80,68 @@ impl ComponentHandler for SetupDeleteButton {
         let emoji_yes = &ctx.bot.config.emoji.yes;
         let emoji_no = &ctx.bot.config.emoji.no;
 
-        let (content, components) = match action {
+        let (container, components) = match action {
             "setup_del_chatbot_confirm" => {
                 if let Some(gid) = guild_id {
                     let success = Self::delete_chatbot(gid).await.unwrap_or(false);
-                    let msg = if success {
+                    let content = if success {
                         format!("{} Chatbot setup deleted.", emoji_yes)
                     } else {
                         format!("{} Failed to delete chatbot setup.", emoji_no)
                     };
-                    (msg, vec![])
+                    (build_status_container("Chatbot Setup", &content), vec![])
                 } else {
-                    (format!("{} Invalid request.", emoji_no), vec![])
+                    (
+                        build_status_container(
+                            "Chatbot Setup",
+                            &format!("{} Invalid request.", emoji_no),
+                        ),
+                        vec![],
+                    )
                 }
             }
-            "setup_del_chatbot_cancel" => {
-                (format!("{} Cancellation acknowledged.", emoji_no), vec![])
-            }
+            "setup_del_chatbot_cancel" => (
+                build_status_container(
+                    "Chatbot Setup",
+                    &format!("{} Cancellation acknowledged.", emoji_no),
+                ),
+                vec![],
+            ),
             "setup_del_globalchat_confirm" => {
                 if let Some(gid) = guild_id {
                     let success = Self::delete_globalchat(ctx, gid).await.unwrap_or(false);
-                    let msg = if success {
+                    let content = if success {
                         format!("{} Global chat setup deleted.", emoji_yes)
                     } else {
                         format!("{} Failed to delete global chat setup.", emoji_no)
                     };
-                    (msg, vec![])
+                    (build_status_container("Global Chat", &content), vec![])
                 } else {
-                    (format!("{} Invalid request.", emoji_no), vec![])
+                    (
+                        build_status_container(
+                            "Global Chat",
+                            &format!("{} Invalid request.", emoji_no),
+                        ),
+                        vec![],
+                    )
                 }
             }
-            "setup_del_globalchat_cancel" => {
-                (format!("{} Cancellation acknowledged.", emoji_no), vec![])
-            }
+            "setup_del_globalchat_cancel" => (
+                build_status_container(
+                    "Global Chat",
+                    &format!("{} Cancellation acknowledged.", emoji_no),
+                ),
+                vec![],
+            ),
             _ => return Ok(()),
+        };
+
+        let components = if components.is_empty() {
+            vec![Component::Container(container)]
+        } else {
+            let mut out = vec![Component::Container(container)];
+            out.extend(components);
+            out
         };
 
         ctx.bot
@@ -172,8 +153,9 @@ impl ComponentHandler for SetupDeleteButton {
                 &InteractionResponse {
                     kind: InteractionResponseType::UpdateMessage,
                     data: Some(InteractionResponseData {
-                        content: Some(content),
+                        content: None,
                         components: Some(components),
+                        flags: Some(MessageFlags::IS_COMPONENTS_V2),
                         ..Default::default()
                     }),
                 },
@@ -181,5 +163,24 @@ impl ComponentHandler for SetupDeleteButton {
             .await?;
 
         Ok(())
+    }
+}
+
+fn build_status_container(title: &str, content: &str) -> Container {
+    Container {
+        id: None,
+        components: vec![
+            Component::TextDisplay(TextDisplay {
+                id: None,
+                content: format!("## {}\n{}", title, content),
+            }),
+            Component::Separator(Separator {
+                id: None,
+                divider: None,
+                spacing: Some(SeparatorSpacingSize::Large),
+            }),
+        ],
+        accent_color: None,
+        spoiler: None,
     }
 }
