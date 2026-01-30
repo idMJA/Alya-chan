@@ -1,13 +1,11 @@
 use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
-use skia_safe::{
-    surfaces, Color, Font, Paint, Rect,
-};
+use skia_safe::{surfaces, Color, Font, Paint, Rect};
 use twilight_model::application::command::{Command, CommandType};
 use twilight_model::application::interaction::application_command::CommandOptionValue;
 use twilight_model::channel::message::component::{
-    Component, Container, MediaGallery, MediaGalleryItem, Separator, SeparatorSpacingSize, TextDisplay,
-    UnfurledMediaItem,
+    Component, Container, MediaGallery, MediaGalleryItem, Separator, SeparatorSpacingSize,
+    TextDisplay, UnfurledMediaItem,
 };
 use twilight_model::http::attachment::Attachment;
 use twilight_model::http::interaction::{
@@ -26,8 +24,7 @@ const AVATAR1_Y: f32 = 205.1;
 const AVATAR2_X: f32 = 151.0;
 const AVATAR2_Y: f32 = 433.7;
 
-const BACKGROUND_URL: &str =
-    "https://i.postimg.cc/655CqYWT/4-20250720-072352-0001.png";
+const BACKGROUND_URL: &str = "https://i.postimg.cc/655CqYWT/4-20250720-072352-0001.png";
 
 #[async_trait]
 impl SlashCommand for ShipCommand {
@@ -93,8 +90,11 @@ impl SlashCommand for ShipCommand {
             Ok(resp) => match resp.model().await {
                 Ok(user) => user,
                 Err(_) => {
-                    return send_error_response(ctx, "❌ **Error**\n\nFailed to fetch member data.")
-                        .await;
+                    return send_error_response(
+                        ctx,
+                        "❌ **Error**\n\nFailed to fetch member data.",
+                    )
+                    .await;
                 }
             },
             Err(_) => {
@@ -213,7 +213,9 @@ impl SlashCommand for ShipCommand {
                     data: Some(InteractionResponseData {
                         attachments: Some(vec![attachment]),
                         components: Some(vec![Component::Container(container)]),
-                        flags: Some(twilight_model::channel::message::MessageFlags::IS_COMPONENTS_V2),
+                        flags: Some(
+                            twilight_model::channel::message::MessageFlags::IS_COMPONENTS_V2,
+                        ),
                         ..Default::default()
                     }),
                 },
@@ -280,13 +282,19 @@ fn render_ship_canvas(
     // Draw gradient background
     let mut paint = Paint::default();
     paint.set_color(Color::from_rgb(255, 107, 138)); // #ff6b8a
-    canvas.draw_rect(Rect::from_xywh(0.0, 0.0, width as f32, height as f32), &paint);
+    canvas.draw_rect(
+        Rect::from_xywh(0.0, 0.0, width as f32, height as f32),
+        &paint,
+    );
 
     // Overlay gradient
     let mut paint = Paint::default();
     paint.set_color(Color::from_rgb(217, 70, 239)); // #d946ef
     paint.set_alpha(128);
-    canvas.draw_rect(Rect::from_xywh(0.0, 0.0, width as f32, height as f32), &paint);
+    canvas.draw_rect(
+        Rect::from_xywh(0.0, 0.0, width as f32, height as f32),
+        &paint,
+    );
 
     // Avatar constants
     const AVATAR_SIZE: f32 = 97.2;
@@ -320,12 +328,7 @@ fn render_ship_canvas(
                 let distance = (dx * dx + dy * dy).sqrt();
 
                 if distance <= radius {
-                    let color = Color::from_argb(
-                        pixel[3],
-                        pixel[0],
-                        pixel[1],
-                        pixel[2],
-                    );
+                    let color = Color::from_argb(pixel[3], pixel[0], pixel[1], pixel[2]);
                     let mut paint = Paint::default();
                     paint.set_color(color);
                     canvas.draw_circle((px, py), 0.5, &paint);
@@ -357,12 +360,7 @@ fn render_ship_canvas(
                 let distance = (dx * dx + dy * dy).sqrt();
 
                 if distance <= radius {
-                    let color = Color::from_argb(
-                        pixel[3],
-                        pixel[0],
-                        pixel[1],
-                        pixel[2],
-                    );
+                    let color = Color::from_argb(pixel[3], pixel[0], pixel[1], pixel[2]);
                     let mut paint = Paint::default();
                     paint.set_color(color);
                     canvas.draw_circle((px, py), 0.5, &paint);
@@ -378,17 +376,18 @@ fn render_ship_canvas(
 
     let font = Font::default();
     let percentage_text = format!("{}%", love_percentage);
-    
+
     // Draw text with shadow for better visibility
     let mut shadow_paint = Paint::default();
     shadow_paint.set_color(Color::from_argb(128, 0, 0, 0));
     canvas.draw_str(&percentage_text, (457.0, 365.0), &font, &shadow_paint);
-    
+
     canvas.draw_str(&percentage_text, (455.0, 363.0), &font, &paint);
 
     // Encode to PNG
     let image = surface.image_snapshot();
-    let data = image.encode_to_data(skia_safe::EncodedImageFormat::PNG)
+    let data = image
+        .encode_to_data(skia_safe::EncodedImageFormat::PNG)
         .ok_or("Failed to encode PNG".to_string())?;
     Ok(data.as_ref().to_vec())
 }

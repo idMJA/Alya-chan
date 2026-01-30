@@ -2,13 +2,14 @@ use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
 use twilight_model::application::command::{Command, CommandType};
 use twilight_model::application::interaction::application_command::CommandOptionValue;
+use twilight_model::channel::message::component::{
+    Component, Container, MediaGallery, MediaGalleryItem, Separator, SeparatorSpacingSize,
+    TextDisplay, UnfurledMediaItem,
+};
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
 use twilight_util::builder::command::{CommandBuilder, StringBuilder, UserBuilder};
-use twilight_model::channel::message::component::{
-    Component, Container, MediaGallery, MediaGalleryItem, Separator, SeparatorSpacingSize, TextDisplay, UnfurledMediaItem
-};
 use url::form_urlencoded;
 
 pub struct FakeTweetCommand;
@@ -103,7 +104,7 @@ impl SlashCommand for FakeTweetCommand {
                 Component::MediaGallery(MediaGallery {
                     id: None,
                     items: vec![MediaGalleryItem {
-                        media: UnfurledMediaItem{
+                        media: UnfurledMediaItem {
                             url: image_url.clone(),
                             content_type: None,
                             height: None,
@@ -138,7 +139,9 @@ impl SlashCommand for FakeTweetCommand {
                     kind: InteractionResponseType::ChannelMessageWithSource,
                     data: Some(InteractionResponseData {
                         components: Some(vec![Component::Container(container)]),
-                        flags: Some(twilight_model::channel::message::MessageFlags::IS_COMPONENTS_V2),
+                        flags: Some(
+                            twilight_model::channel::message::MessageFlags::IS_COMPONENTS_V2,
+                        ),
                         ..Default::default()
                     }),
                 },

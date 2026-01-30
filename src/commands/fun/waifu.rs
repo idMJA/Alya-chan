@@ -1,10 +1,11 @@
 use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
+use twilight_model::channel::message::component::{
+    Component, Container, MediaGallery, MediaGalleryItem, Separator, SeparatorSpacingSize,
+    TextDisplay, UnfurledMediaItem,
+};
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
-};
-use twilight_model::channel::message::component::{
-    Component, Container, MediaGallery, MediaGalleryItem, Separator, SeparatorSpacingSize, TextDisplay, UnfurledMediaItem,
 };
 
 pub struct WaifuCommand;
@@ -34,7 +35,6 @@ impl SlashCommand for WaifuCommand {
             Err(_) => None,
         };
 
-
         let container = if let Some(url) = image_url {
             Container {
                 id: None,
@@ -46,7 +46,7 @@ impl SlashCommand for WaifuCommand {
                     Component::MediaGallery(MediaGallery {
                         id: None,
                         items: vec![MediaGalleryItem {
-                            media: UnfurledMediaItem{
+                            media: UnfurledMediaItem {
                                 url: url.clone(),
                                 content_type: None,
                                 height: None,
@@ -103,7 +103,9 @@ impl SlashCommand for WaifuCommand {
                     kind: InteractionResponseType::ChannelMessageWithSource,
                     data: Some(InteractionResponseData {
                         components: Some(vec![Component::Container(container)]),
-                        flags: Some(twilight_model::channel::message::MessageFlags::IS_COMPONENTS_V2),
+                        flags: Some(
+                            twilight_model::channel::message::MessageFlags::IS_COMPONENTS_V2,
+                        ),
                         ..Default::default()
                     }),
                 },

@@ -2,13 +2,13 @@ use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
 use twilight_model::application::command::{Command, CommandType};
 use twilight_model::application::interaction::application_command::CommandOptionValue;
+use twilight_model::channel::message::component::{
+    Component, Container, Separator, SeparatorSpacingSize, TextDisplay,
+};
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
 use twilight_util::builder::command::{CommandBuilder, UserBuilder};
-use twilight_model::channel::message::component::{
-    Component, Container, Separator, SeparatorSpacingSize, TextDisplay,
-};
 use uuid::Uuid;
 
 pub struct HackCommand;
@@ -162,7 +162,6 @@ impl SlashCommand for HackCommand {
             "2222-4000-7000-0005",
         ];
 
-
         let container = Container {
             id: None,
             components: vec![
@@ -223,7 +222,9 @@ impl SlashCommand for HackCommand {
                     kind: InteractionResponseType::ChannelMessageWithSource,
                     data: Some(InteractionResponseData {
                         components: Some(vec![Component::Container(container)]),
-                        flags: Some(twilight_model::channel::message::MessageFlags::IS_COMPONENTS_V2),
+                        flags: Some(
+                            twilight_model::channel::message::MessageFlags::IS_COMPONENTS_V2,
+                        ),
                         ..Default::default()
                     }),
                 },
