@@ -31,8 +31,6 @@ async fn main() -> Result<()> {
 
     init_logger();
 
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-
     tracing::info!("Starting Alya-chan Discord Bot...");
 
     let token = env::var("DISCORD_TOKEN").expect("DISCORD_TOKEN environment variable is required");

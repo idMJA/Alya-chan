@@ -4,7 +4,7 @@ mod globalchat;
 pub use chatbot::ChatbotCommand;
 pub use globalchat::GlobalChatCommand;
 
-use super::fun::{FakeTweetCommand, HackCommand, IqCommand, ShipCommand, WaifuCommand};
+use super::fun::{FakeTweetCommand, HackCommand, IqCommand, WaifuCommand};
 use super::informations::{AboutCommand, HelpCommand, PingCommand};
 use super::utility::UserInfoCommand;
 use crate::handlers::CommandManager;
@@ -23,7 +23,7 @@ pub fn setup_commands(cmd_mgr: &mut CommandManager) {
     cmd_mgr.register("fun", Arc::new(FakeTweetCommand));
     cmd_mgr.register("fun", Arc::new(HackCommand));
     cmd_mgr.register("fun", Arc::new(IqCommand));
-    cmd_mgr.register("fun", Arc::new(ShipCommand));
+    // cmd_mgr.register("fun", Arc::new(ShipCommand));
     cmd_mgr.register("fun", Arc::new(WaifuCommand));
     // TODO: Register moderation commands
 }

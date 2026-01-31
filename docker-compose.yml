@@ -1,0 +1,11 @@
+services:
+  alya-chan:
+    build: .
+    container_name: alya-chan
+    env_file:
+      - .env
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+      - ./emoji.toml:/app/emoji.toml:ro
+      - ./data:/app/data
+    restart: unless-stopped
