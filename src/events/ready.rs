@@ -1,9 +1,13 @@
 use crate::events::guild_create::GuildCreateHandler;
-use crate::types::{BotResult, EventContext, EventHandler};
+use crate::types::{BotResult, EventContext, EventHandler, PresenceUpdate};
 use crate::utils::constants::BOT_VERSION;
 use crate::utils::topgg::TopGgPoster;
 use async_trait::async_trait;
+use std::time::Duration;
+use tokio::sync::broadcast;
+use twilight_cache_inmemory::InMemoryCache;
 use twilight_model::gateway::event::Event;
+use twilight_model::gateway::presence::Status;
 
 pub struct ReadyHandler;
 
@@ -35,6 +39,41 @@ impl ReadyHandler {
 
         tracing::info!("Slash command registration completed");
         Ok(())
+    }
+
+    async fn start_rotating_presence(
+        &self,
+        cache: std::sync::Arc<InMemoryCache>,
+        presence_tx: broadcast::Sender<PresenceUpdate>,
+    ) {
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
+        let mut rotation = 0usize;
+
+        loop {
+            interval.tick().await;
+
+            let guild_count = cache.stats().guilds();
+            let user_count = cache.stats().users();
+
+            let activity_name = match rotation % 3 {
+                0 => format!("with {} users", user_count),
+                1 => format!("in {} guilds", guild_count),
+                _ => format!("v{}", BOT_VERSION),
+            };
+
+            let update = PresenceUpdate {
+                activity_name: activity_name.clone(),
+                status: Status::Idle,
+            };
+
+            if let Err(e) = presence_tx.send(update) {
+                tracing::error!("Failed to send presence update: {}", e);
+            } else {
+                tracing::info!("📊 Presence: {}", activity_name);
+            }
+
+            rotation += 1;
+        }
     }
 }
 
@@ -75,6 +114,16 @@ impl EventHandler for ReadyHandler {
             if current_shard == 0 {
                 // Register all slash commands to Discord
                 self.register_commands(ctx, ready.application.id).await?;
+
+                // Start rotating presence task
+                let handler = ReadyHandler;
+                let cache = ctx.bot.cache.clone();
+                let presence_tx = ctx.bot.presence_tx.clone();
+                tokio::spawn(async move {
+                    handler.start_rotating_presence(cache, presence_tx).await;
+                });
+
+                tracing::info!("Presence rotation started (30s interval)");
 
                 if let Some(top_gg_config) = &ctx.bot.config.top_gg {
                     if top_gg_config.enabled {

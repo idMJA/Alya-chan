@@ -12,7 +12,7 @@ use std::env;
 use std::sync::Arc;
 
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
-use twilight_gateway::{Config as GatewayConfig, Event, EventTypeFlags, Shard, ShardId, StreamExt};
+use twilight_gateway::{Event, EventTypeFlags, Shard, ShardId, StreamExt};
 use twilight_http::Client as HttpClient;
 use twilight_standby::Standby;
 
@@ -49,7 +49,6 @@ async fn main() -> Result<()> {
         Config::load_with_overrides("./config.toml").expect("Missing or invalid ./config.toml — please create a valid config.toml in the project root. See README for examples."),
     );
 
-    // Initialize hybrid database (local SQLite replica + optional Turso remote)
     let db_config = config.database.as_ref();
     let local_path = db_config
         .map(|d| d.local_path.as_str())
@@ -70,7 +69,6 @@ async fn main() -> Result<()> {
 
     let db = match AlyaDatabase::init(local_path, remote_url, remote_token).await {
         Ok(db) => {
-            // Sync local replica from remote on startup
             if let Err(e) = db.sync().await {
                 tracing::warn!("Failed to sync database on startup: {}", e);
             }
@@ -82,7 +80,6 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Get recommended shard count from Discord
     let gateway_info = http
         .gateway()
         .authed()
@@ -103,6 +100,8 @@ async fn main() -> Result<()> {
     let event_manager = Arc::clone(&handlers.event_manager);
     let component_manager = Arc::clone(&handlers.component_manager);
 
+    let (presence_tx, _) = tokio::sync::broadcast::channel(10);
+
     let bot_context = BotContext::new(
         Arc::clone(&http),
         Arc::clone(&cache),
@@ -111,12 +110,44 @@ async fn main() -> Result<()> {
         db,
         Arc::clone(&cmd_mgr),
         shard_count,
+        presence_tx.clone(),
     );
 
     let intents = get_default_intents();
 
-    // Create shards with automatic sharding
-    let gateway_config = GatewayConfig::new(token.clone(), intents);
+    use twilight_gateway::ConfigBuilder;
+    use twilight_model::gateway::payload::outgoing::update_presence::UpdatePresencePayload;
+    use twilight_model::gateway::presence::{Activity, ActivityType, Status};
+
+    let initial_activity = Activity {
+        application_id: None,
+        assets: None,
+        buttons: vec![],
+        created_at: None,
+        details: None,
+        emoji: None,
+        flags: None,
+        id: None,
+        instance: None,
+        kind: ActivityType::Playing,
+        name: "Starting up...".to_string(),
+        party: None,
+        secrets: None,
+        state: None,
+        timestamps: None,
+        url: None,
+    };
+
+    let initial_presence = UpdatePresencePayload {
+        activities: vec![initial_activity],
+        afk: false,
+        since: None,
+        status: Status::Idle,
+    };
+
+    let gateway_config = ConfigBuilder::new(token.clone(), intents)
+        .presence(initial_presence)
+        .build();
 
     let shards: Vec<Shard> = (0..shard_count)
         .map(|id| Shard::with_config(ShardId::new(id, shard_count), gateway_config.clone()))
@@ -125,7 +156,6 @@ async fn main() -> Result<()> {
     tracing::info!("Bot setup complete, connecting to Discord...");
     tracing::info!("Registered commands: {}", cmd_mgr.get_all_commands().len());
 
-    // Spawn a task for each shard
     let mut tasks = Vec::new();
 
     for mut shard in shards {
@@ -137,33 +167,72 @@ async fn main() -> Result<()> {
         let help_cmd = Arc::clone(&help_cmd_clone);
         let event_manager = Arc::clone(&event_manager);
         let component_manager = Arc::clone(&component_manager);
+        let mut presence_rx = presence_tx.subscribe();
 
         let task = tokio::spawn(async move {
             tracing::info!("Shard {} starting...", shard_id);
 
             loop {
-                let event = match shard.next_event(EventTypeFlags::all()).await {
-                    Some(Ok(event)) => event,
-                    Some(Err(source)) => {
-                        tracing::warn!(?source, "Shard {} error receiving event", shard_id);
-                        continue;
+                tokio::select! {
+
+                    Ok(update) = presence_rx.recv() => {
+                        use twilight_model::gateway::payload::outgoing::UpdatePresence;
+                        use twilight_model::gateway::presence::Activity;
+
+                        let activity = Activity {
+                            application_id: None,
+                            assets: None,
+                            buttons: vec![],
+                            created_at: None,
+                            details: None,
+                            emoji: None,
+                            flags: None,
+                            id: None,
+                            instance: None,
+                            kind: twilight_model::gateway::presence::ActivityType::Playing,
+                            name: update.activity_name.clone(),
+                            party: None,
+                            secrets: None,
+                            state: None,
+                            timestamps: None,
+                            url: None,
+                        };
+
+                        match UpdatePresence::new(vec![activity], false, None, update.status) {
+                            Ok(cmd) => {
+                                shard.command(&cmd);
+                                tracing::debug!("Shard {} presence updated: {}", shard_id, update.activity_name);
+                            }
+                            Err(e) => {
+                                tracing::error!("Shard {} failed to create presence command: {}", shard_id, e);
+                            }
+                        }
                     }
-                    None => {
-                        tracing::warn!("Shard {} connection closed", shard_id);
-                        break;
-                    }
-                };
 
-                cache.update(&event);
-                standby.process(&event);
 
-                let bot = bot_context.clone();
-                let cmd_mgr_clone = Arc::clone(&cmd_mgr);
-                let help_cmd_clone = Arc::clone(&help_cmd);
-                let evt_mgr = Arc::clone(&event_manager);
-                let comp_mgr = Arc::clone(&component_manager);
+                    event = shard.next_event(EventTypeFlags::all()) => {
+                        let event = match event {
+                            Some(Ok(event)) => event,
+                            Some(Err(source)) => {
+                                tracing::warn!(?source, "Shard {} error receiving event", shard_id);
+                                continue;
+                            }
+                            None => {
+                                tracing::warn!("Shard {} connection closed", shard_id);
+                                break;
+                            }
+                        };
 
-                tokio::spawn(async move {
+                        cache.update(&event);
+                        standby.process(&event);
+
+                        let bot = bot_context.clone();
+                        let cmd_mgr_clone = Arc::clone(&cmd_mgr);
+                        let help_cmd_clone = Arc::clone(&help_cmd);
+                        let evt_mgr = Arc::clone(&event_manager);
+                        let comp_mgr = Arc::clone(&component_manager);
+
+                        tokio::spawn(async move {
                     if let Err(e) = evt_mgr.process_event(bot.clone(), event.clone()).await {
                         tracing::error!("Error processing event: {}", e);
                     }
@@ -223,7 +292,9 @@ async fn main() -> Result<()> {
                             }
                         }
                     }
-                });
+                        });
+                    }
+                }
             }
 
             tracing::info!("Shard {} stopped", shard_id);
@@ -232,7 +303,6 @@ async fn main() -> Result<()> {
         tasks.push(task);
     }
 
-    // Wait for all shard tasks to complete
     for task in tasks {
         if let Err(e) = task.await {
             tracing::error!("Shard task error: {}", e);
