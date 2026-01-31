@@ -43,7 +43,8 @@ impl TopGgPoster {
 
         let payload = Stats::from_count(guild_count, Some(shard_count as usize));
 
-        let result: Result<(), _> = self.client
+        let result: Result<(), _> = self
+            .client
             .post_stats(payload)
             .await
             .map_err(|e| BotError::Other(format!("[Top.gg] {}", e)));
