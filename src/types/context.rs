@@ -24,6 +24,7 @@ pub struct BotContext {
     pub command_manager: Arc<CommandManager>,
     pub shard_count: u32,
     pub presence_tx: broadcast::Sender<PresenceUpdate>,
+    pub bot_user: twilight_model::user::CurrentUser,
 }
 
 #[derive(Clone, Debug)]
@@ -42,6 +43,7 @@ impl BotContext {
         command_manager: Arc<CommandManager>,
         shard_count: u32,
         presence_tx: broadcast::Sender<PresenceUpdate>,
+        bot_user: twilight_model::user::CurrentUser,
     ) -> Self {
         Self {
             http,
@@ -52,6 +54,7 @@ impl BotContext {
             command_manager,
             shard_count,
             presence_tx,
+            bot_user,
         }
     }
 }

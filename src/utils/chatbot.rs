@@ -57,7 +57,11 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         setup.is_some()
     );
 
-    let is_alya_mentioned = msg.content.to_lowercase().contains("alya");
+    let content_lower = msg.content.to_lowercase();
+    let is_alya_mentioned = content_lower
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|word| word == "alya");
+
     tracing::debug!(
         "Message from {} in channel {}: alya_mentioned={}, has_setup={}",
         msg.author.id,
@@ -66,24 +70,16 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         setup.is_some()
     );
 
-    let is_bot_mentioned = if let Some(bot_user) = ctx.bot.cache.current_user() {
-        msg.mentions.iter().any(|u| u.id == bot_user.id)
-    } else {
-        !msg.mentions.is_empty() && msg.mentions.iter().any(|u| u.bot)
-    };
+    let is_bot_mentioned = msg.mentions.iter().any(|u| u.id == ctx.bot.bot_user.id);
 
     let is_replying_to_bot = if let Some(referenced_msg) = &msg.referenced_message {
-        if let Some(bot_user) = ctx.bot.cache.current_user() {
-            referenced_msg.author.id == bot_user.id
-        } else {
-            referenced_msg.author.bot
-        }
+        referenced_msg.author.id == ctx.bot.bot_user.id
     } else {
         false
     };
 
     let should_respond = if is_alya_mentioned || is_bot_mentioned || is_replying_to_bot {
-        tracing::debug!("Responding: mentioned or replied");
+        tracing::debug!("Responding: alya mentioned, bot mentioned, or replied");
         true
     } else if let Some(existing) = &setup {
         let channel_match = existing.channel_id == msg.channel_id.to_string();

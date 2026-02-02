@@ -102,6 +102,15 @@ async fn main() -> Result<()> {
 
     let (presence_tx, _) = tokio::sync::broadcast::channel(10);
 
+    let bot_user = http.current_user().await?.model().await?;
+
+    tracing::info!(
+        "Bot user: {}#{} (ID: {})",
+        bot_user.name,
+        bot_user.discriminator,
+        bot_user.id
+    );
+
     let bot_context = BotContext::new(
         Arc::clone(&http),
         Arc::clone(&cache),
@@ -111,6 +120,7 @@ async fn main() -> Result<()> {
         Arc::clone(&cmd_mgr),
         shard_count,
         presence_tx.clone(),
+        bot_user,
     );
 
     let intents = get_default_intents();
