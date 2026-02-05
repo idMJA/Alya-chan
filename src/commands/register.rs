@@ -1,11 +1,7 @@
-mod chatbot;
-mod globalchat;
-
-pub use chatbot::ChatbotCommand;
-pub use globalchat::GlobalChatCommand;
-
 use super::fun::{FakeTweetCommand, HackCommand, IqCommand, WaifuCommand};
 use super::informations::{AboutCommand, HelpCommand, PingCommand};
+use super::moderation::{BanCommand, KickCommand, TimeoutCommand};
+use super::setup::{ChatbotCommand, GlobalChatCommand};
 use super::utility::UserInfoCommand;
 use crate::handlers::CommandManager;
 use std::sync::Arc;
@@ -25,5 +21,8 @@ pub fn setup_commands(cmd_mgr: &mut CommandManager) {
     cmd_mgr.register("fun", Arc::new(IqCommand));
     // cmd_mgr.register("fun", Arc::new(ShipCommand));
     cmd_mgr.register("fun", Arc::new(WaifuCommand));
-    // TODO: Register moderation commands
+
+    cmd_mgr.register("moderation", Arc::new(BanCommand));
+    cmd_mgr.register("moderation", Arc::new(KickCommand));
+    cmd_mgr.register("moderation", Arc::new(TimeoutCommand));
 }
