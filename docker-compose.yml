@@ -1,6 +1,6 @@
 services:
   alya-chan:
-    build: .
+    image: ghcr.io/idmja/alya-chan:latest
     container_name: alya-chan
     env_file:
       - .env
