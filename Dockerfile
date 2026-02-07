@@ -21,6 +21,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         libssl3 \
+        libfontconfig1 \
+        fontconfig \
+        fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/alya-chan /usr/local/bin/alya-chan

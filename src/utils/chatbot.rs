@@ -168,6 +168,7 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
     let request_body = json!({
         "model": "meta-llama/llama-3.1-8b-instruct",
         "messages": messages,
+        "temperature": 0.7,
         "metadata": {
             "guild_id": guild_id.to_string(),
             "channel_id": msg.channel_id.to_string(),
