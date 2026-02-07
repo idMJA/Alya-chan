@@ -28,5 +28,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 once_cell = "1.19"
 reqwest = { version = "0.13", features = ["json"] }
 futures = "0.3"
-topgg = "1.4"
-image = "0.25"
+topgg = { version = "1.4", features = ["webhook", "axum"] }
+axum = "0.7"
+bytes = "1.5"
+skia-safe = { version = "0.91.1", features = ["textlayout", "embed-icudtl"] }

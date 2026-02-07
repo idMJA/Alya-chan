@@ -1,4 +1,4 @@
-use super::fun::{FakeTweetCommand, HackCommand, IqCommand, WaifuCommand};
+use super::fun::{FakeTweetCommand, HackCommand, IqCommand, ShipCommand, WaifuCommand};
 use super::informations::{AboutCommand, HelpCommand, PingCommand};
 use super::moderation::{BanCommand, KickCommand, TimeoutCommand};
 use super::setup::{ChatbotCommand, GlobalChatCommand};
@@ -19,7 +19,7 @@ pub fn setup_commands(cmd_mgr: &mut CommandManager) {
     cmd_mgr.register("fun", Arc::new(FakeTweetCommand));
     cmd_mgr.register("fun", Arc::new(HackCommand));
     cmd_mgr.register("fun", Arc::new(IqCommand));
-    // cmd_mgr.register("fun", Arc::new(ShipCommand));
+    cmd_mgr.register("fun", Arc::new(ShipCommand));
     cmd_mgr.register("fun", Arc::new(WaifuCommand));
 
     cmd_mgr.register("moderation", Arc::new(BanCommand));

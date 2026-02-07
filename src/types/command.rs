@@ -39,7 +39,6 @@ impl SlashCommandContext {
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct CommandMeta {
     pub name: String,
     pub description: String,

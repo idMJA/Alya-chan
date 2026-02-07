@@ -1,27 +1,32 @@
 use std::fmt;
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub enum BotError {
-    Twilight(String),
-    #[allow(dead_code)]
-    CommandNotFound(String),
-    #[allow(dead_code)]
-    MissingPermissions(String),
-    #[allow(dead_code)]
-    InvalidArguments(String),
-    #[allow(dead_code)]
+    Twilight(twilight_http::Error),
+    Gateway(twilight_gateway::error::ReceiveMessageError),
+    Database(String),
+    Config(String),
+    InvalidInput(String),
+    NotFound(String),
     Other(String),
+}
+
+impl BotError {
+    pub fn custom(msg: impl Into<String>) -> Self {
+        Self::Other(msg.into())
+    }
 }
 
 impl fmt::Display for BotError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Twilight(msg) => write!(f, "Twilight error: {}", msg),
-            Self::CommandNotFound(cmd) => write!(f, "Command not found: {}", cmd),
-            Self::MissingPermissions(msg) => write!(f, "Missing permissions: {}", msg),
-            Self::InvalidArguments(msg) => write!(f, "Invalid arguments: {}", msg),
-            Self::Other(msg) => write!(f, "Error: {}", msg),
+            Self::Twilight(e) => write!(f, "Twilight error: {}", e),
+            Self::Gateway(e) => write!(f, "Gateway error: {}", e),
+            Self::Database(e) => write!(f, "Database error: {}", e),
+            Self::Config(e) => write!(f, "Config error: {}", e),
+            Self::InvalidInput(e) => write!(f, "Invalid input: {}", e),
+            Self::NotFound(e) => write!(f, "Not found: {}", e),
+            Self::Other(e) => write!(f, "{}", e),
         }
     }
 }
@@ -29,14 +34,39 @@ impl fmt::Display for BotError {
 impl std::error::Error for BotError {}
 
 impl From<twilight_http::Error> for BotError {
-    fn from(err: twilight_http::Error) -> Self {
-        Self::Twilight(err.to_string())
+    fn from(e: twilight_http::Error) -> Self {
+        Self::Twilight(e)
     }
 }
 
 impl From<twilight_gateway::error::ReceiveMessageError> for BotError {
-    fn from(err: twilight_gateway::error::ReceiveMessageError) -> Self {
-        Self::Twilight(err.to_string())
+    fn from(e: twilight_gateway::error::ReceiveMessageError) -> Self {
+        Self::Gateway(e)
+    }
+}
+
+// Tambahkan From implementations yang kurang
+impl From<twilight_http::response::DeserializeBodyError> for BotError {
+    fn from(e: twilight_http::response::DeserializeBodyError) -> Self {
+        Self::Other(format!("Deserialization error: {}", e))
+    }
+}
+
+impl From<&str> for BotError {
+    fn from(s: &str) -> Self {
+        Self::Other(s.to_string())
+    }
+}
+
+impl From<String> for BotError {
+    fn from(s: String) -> Self {
+        Self::Other(s)
+    }
+}
+
+impl From<Box<dyn std::error::Error>> for BotError {
+    fn from(e: Box<dyn std::error::Error>) -> Self {
+        Self::Other(e.to_string())
     }
 }
 

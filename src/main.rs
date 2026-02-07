@@ -1,3 +1,4 @@
+mod api;
 mod commands;
 mod components;
 mod config;
@@ -167,6 +168,36 @@ async fn main() -> Result<()> {
     tracing::info!("Registered commands: {}", cmd_mgr.get_all_commands().len());
 
     let mut tasks = Vec::new();
+
+    // Start webhook server if top.gg is enabled
+    if let Some(top_gg_config) = &config.top_gg {
+        if top_gg_config.enabled {
+            let bot_ctx = Arc::new(bot_context.clone());
+            let webhook_auth = top_gg_config.webhook_auth.clone();
+
+            let webhook_task = tokio::spawn(async move {
+                match api::WebhookServer::new(
+                    "127.0.0.1:3000",
+                    bot_ctx.clone(),
+                    webhook_auth.clone(),
+                )
+                .await
+                {
+                    Ok(server) => {
+                        tracing::info!("[Webhook Server] Started successfully");
+                        if let Err(e) = server.run(bot_ctx, webhook_auth).await {
+                            tracing::error!("[Webhook Server] Fatal error: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("[Webhook Server] Failed to start: {}", e);
+                    }
+                }
+            });
+
+            tasks.push(webhook_task);
+        }
+    }
 
     for mut shard in shards {
         let shard_id = shard.id().number();

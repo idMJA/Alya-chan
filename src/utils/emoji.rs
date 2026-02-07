@@ -1,4 +1,4 @@
-use twilight_model::channel::message::component::EmojiReactionType;
+use twilight_model::channel::message::EmojiReactionType;
 use twilight_model::id::Id;
 
 /// Parse an emoji string from config (e.g. "<:yes:123456>") into a `Button` emoji struct.
@@ -22,7 +22,9 @@ pub fn parse_component_emoji(s: &str) -> Option<EmojiReactionType> {
     }
 
     if !s.is_empty() {
-        return Some(EmojiReactionType::Unicode { name: s.to_string() });
+        return Some(EmojiReactionType::Unicode {
+            name: s.to_string(),
+        });
     }
 
     None

@@ -38,6 +38,7 @@ pub struct ChatbotConfig {
 pub struct TopGgConfig {
     pub enabled: bool,
     pub token: String,
+    pub webhook_auth: String,
 }
 
 #[derive(Debug, Clone)]
@@ -137,6 +138,7 @@ struct RawChatbot {
 struct RawTopGg {
     enabled: bool,
     token: String,
+    webhook_auth: String,
 }
 
 #[derive(Deserialize)]
@@ -387,6 +389,7 @@ impl Config {
             top_gg: raw.top_gg.map(|tg| TopGgConfig {
                 enabled: tg.enabled,
                 token: tg.token,
+                webhook_auth: tg.webhook_auth,
             }),
             database: raw.database.map(|db| DatabaseConfig {
                 local_path: db.local_path.unwrap_or_else(|| "data/alya.db".to_string()),
