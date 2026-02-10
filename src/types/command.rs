@@ -16,6 +16,38 @@ pub struct SlashCommandContext {
     pub data: Box<CommandData>,
 }
 
+pub struct AutocompleteContext {
+    pub bot: BotContext,
+    pub interaction_id: twilight_model::id::Id<twilight_model::id::marker::InteractionMarker>,
+    pub application_id: twilight_model::id::Id<twilight_model::id::marker::ApplicationMarker>,
+    pub author_id: Option<Id<UserMarker>>,
+    pub guild_id: Option<Id<GuildMarker>>,
+    pub token: String,
+    pub data: Box<CommandData>,
+}
+
+impl AutocompleteContext {
+    pub fn new(
+        bot: BotContext,
+        interaction_id: twilight_model::id::Id<twilight_model::id::marker::InteractionMarker>,
+        application_id: twilight_model::id::Id<twilight_model::id::marker::ApplicationMarker>,
+        author_id: Option<Id<UserMarker>>,
+        guild_id: Option<Id<GuildMarker>>,
+        token: String,
+        data: CommandData,
+    ) -> Self {
+        Self {
+            bot,
+            interaction_id,
+            application_id,
+            author_id,
+            guild_id,
+            token,
+            data: Box::new(data),
+        }
+    }
+}
+
 impl SlashCommandContext {
     pub fn new(
         bot: BotContext,
@@ -65,4 +97,8 @@ pub trait SlashCommand: Send + Sync {
     }
 
     async fn execute(&self, ctx: &SlashCommandContext) -> BotResult<()>;
+
+    async fn autocomplete(&self, _ctx: &AutocompleteContext) -> BotResult<()> {
+        Ok(())
+    }
 }

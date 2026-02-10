@@ -32,3 +32,6 @@ topgg = { version = "1.4", features = ["webhook", "axum"] }
 axum = "0.7"
 bytes = "1.5"
 skia-safe = { version = "0.91.1", features = ["textlayout", "embed-icudtl"] }
+base64 = "0.22"
+hickory-proto = "0.24"
+rand = "0.8"

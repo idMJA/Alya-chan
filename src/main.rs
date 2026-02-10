@@ -15,12 +15,14 @@ use std::sync::Arc;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{Event, EventTypeFlags, Shard, ShardId, StreamExt};
 use twilight_http::Client as HttpClient;
+use twilight_model::application::interaction::{InteractionData, InteractionType};
 use twilight_standby::Standby;
 
 use crate::commands::HelpCommand;
 use crate::config::Config;
 use crate::database::service::AlyaDatabase;
 use handlers::{get_default_intents, HandlersSetup};
+use types::AutocompleteContext;
 use types::BotContext;
 use types::SlashCommand;
 use types::SlashCommandContext;
@@ -281,7 +283,7 @@ async fn main() -> Result<()> {
                     if let Event::InteractionCreate(interaction) = &event {
                         if let Some(data) = &interaction.data {
                             match data {
-                                twilight_model::application::interaction::InteractionData::ApplicationCommand(cmd_data) => {
+                                InteractionData::ApplicationCommand(cmd_data) => {
                                     let cmd_name = &cmd_data.name;
                                     let interaction_id = interaction.id;
                                     let application_id = interaction.application_id;
@@ -289,12 +291,9 @@ async fn main() -> Result<()> {
                                     let guild_id = interaction.guild_id;
                                     let token = interaction.token.clone();
 
-                                    tracing::info!("Received slash command: {}", cmd_name);
-
-                                    if cmd_name == "help" {
-                                        let help_as_cmd: Arc<dyn SlashCommand> = help_cmd_clone.clone();
-                                        if let Err(e) = help_as_cmd.execute(
-                                            &SlashCommandContext::new(
+                                    if interaction.kind == InteractionType::ApplicationCommandAutocomplete {
+                                        if let Some(command) = cmd_mgr_clone.get(cmd_name) {
+                                            let ctx = AutocompleteContext::new(
                                                 bot.clone(),
                                                 interaction_id,
                                                 application_id,
@@ -302,28 +301,48 @@ async fn main() -> Result<()> {
                                                 guild_id,
                                                 token,
                                                 (**cmd_data).clone(),
-                                            )
-                                        ).await {
-                                            tracing::error!("Error executing help command: {}", e);
-                                        }
-                                    } else if let Some(command) = cmd_mgr_clone.get(cmd_name) {
-                                        let ctx = SlashCommandContext::new(
-                                            bot.clone(),
-                                            interaction_id,
-                                            application_id,
-                                            author_id,
-                                            guild_id,
-                                            token,
-                                            (**cmd_data).clone(),
-                                        );
-                                        if let Err(e) = command.execute(&ctx).await {
-                                            tracing::error!("Error executing command '{}': {}", cmd_name, e);
+                                            );
+                                            if let Err(e) = command.autocomplete(&ctx).await {
+                                                tracing::error!("Error executing autocomplete for '{}': {}", cmd_name, e);
+                                            }
                                         }
                                     } else {
-                                        tracing::warn!("Command not found: {}", cmd_name);
+                                        tracing::info!("Received slash command: {}", cmd_name);
+
+                                        if cmd_name == "help" {
+                                            let help_as_cmd: Arc<dyn SlashCommand> = help_cmd_clone.clone();
+                                            if let Err(e) = help_as_cmd.execute(
+                                                &SlashCommandContext::new(
+                                                    bot.clone(),
+                                                    interaction_id,
+                                                    application_id,
+                                                    author_id,
+                                                    guild_id,
+                                                    token,
+                                                    (**cmd_data).clone(),
+                                                )
+                                            ).await {
+                                                tracing::error!("Error executing help command: {}", e);
+                                            }
+                                        } else if let Some(command) = cmd_mgr_clone.get(cmd_name) {
+                                            let ctx = SlashCommandContext::new(
+                                                bot.clone(),
+                                                interaction_id,
+                                                application_id,
+                                                author_id,
+                                                guild_id,
+                                                token,
+                                                (**cmd_data).clone(),
+                                            );
+                                            if let Err(e) = command.execute(&ctx).await {
+                                                tracing::error!("Error executing command '{}': {}", cmd_name, e);
+                                            }
+                                        } else {
+                                            tracing::warn!("Command not found: {}", cmd_name);
+                                        }
                                     }
                                 }
-                                twilight_model::application::interaction::InteractionData::MessageComponent(_) => {
+                                InteractionData::MessageComponent(_) => {
                                     let interaction_inner = &interaction.0;
                                     if let Err(e) = comp_mgr.process_interaction(bot.clone(), interaction_inner.clone()).await {
                                         tracing::error!("Error processing interaction: {}", e);
