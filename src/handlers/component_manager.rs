@@ -13,7 +13,6 @@ impl ComponentManager {
         }
     }
 
-    #[allow(dead_code)]
     pub fn register(&mut self, handler: Arc<dyn ComponentHandler>) {
         self.handlers.push(handler);
     }
@@ -36,30 +35,25 @@ impl ComponentManager {
         bot: BotContext,
         interaction: Interaction,
     ) -> BotResult<()> {
-        let custom_id = if let Some(data) = &interaction.data {
-            match data {
-                InteractionData::MessageComponent(comp_data) => Some(comp_data.custom_id.as_str()),
-                _ => None,
-            }
-        } else {
-            None
-        };
+        let custom_id = interaction.data.as_ref().and_then(|data| match data {
+            InteractionData::MessageComponent(comp_data) => Some(comp_data.custom_id.as_str()),
+            _ => None,
+        });
 
         if let Some(custom_id) = custom_id {
             for handler in &self.handlers {
                 let pattern = handler.custom_id_pattern();
 
-                let matches = if let Some(prefix) = pattern.strip_suffix('*') {
-                    custom_id.starts_with(prefix)
-                } else {
-                    custom_id == pattern
-                };
+                let matches = pattern.strip_suffix('*').map_or_else(
+                    || custom_id == pattern,
+                    |prefix| custom_id.starts_with(prefix),
+                );
 
                 if matches {
                     let ctx = ComponentContext::new(bot.clone(), interaction.clone());
 
                     match handler.handle(&ctx).await {
-                        Ok(_) => {
+                        Ok(()) => {
                             tracing::info!("Component '{}' handled successfully", custom_id);
                             return Ok(());
                         }

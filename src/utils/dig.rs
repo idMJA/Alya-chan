@@ -1,5 +1,4 @@
 use crate::utils::{dns, embed, table};
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -14,6 +13,7 @@ const DNSSEC_WARN: &str = ":warning: cd bit set, DNSSEC validation disabled";
 #[derive(Clone, Debug)]
 pub struct Provider {
     pub name: &'static str,
+    #[allow(dead_code)]
     pub info: &'static str,
     pub doh: dns::Endpoint,
     pub dig: &'static str,
@@ -135,7 +135,8 @@ struct Entry {
     req: Req,
 }
 
-static STORE: Lazy<RwLock<HashMap<String, Entry>>> = Lazy::new(|| RwLock::new(HashMap::new()));
+static STORE: std::sync::LazyLock<RwLock<HashMap<String, Entry>>> =
+    std::sync::LazyLock::new(|| RwLock::new(HashMap::new()));
 
 pub fn dom(input: &str) -> Option<String> {
     let raw = input.trim();
@@ -145,7 +146,7 @@ pub fn dom(input: &str) -> Option<String> {
     let stripped = if raw.contains("://") {
         url::Url::parse(raw)
             .ok()
-            .and_then(|u| u.host_str().map(|s| s.to_string()))
+            .and_then(|u| u.host_str().map(std::string::ToString::to_string))
     } else {
         Some(raw.to_string())
     }?;
@@ -168,8 +169,11 @@ pub fn prov(name: &str) -> Option<&'static Provider> {
 }
 
 pub fn types(raw: Option<&str>) -> Vec<String> {
-    match raw.map(|r| r.trim()) {
-        Some("*") => ALL_TYPES.iter().map(|t| t.to_string()).collect(),
+    match raw.map(str::trim) {
+        Some("*") => ALL_TYPES
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect(),
         Some(v) if !v.is_empty() => v
             .split_whitespace()
             .map(|t| t.trim().to_uppercase())
@@ -207,6 +211,7 @@ pub async fn run(key: &str) -> Option<(Vec<Embed>, Vec<Component>)> {
                 entry.req.clone()
             } else {
                 map.remove(key);
+                drop(map);
                 return None;
             }
         } else {
@@ -223,7 +228,7 @@ pub async fn run(key: &str) -> Option<(Vec<Embed>, Vec<Component>)> {
 
         let desc = present(&req.domain, t, provider, &lookup, req.short, req.cdflag);
         embeds.push(embed::make(
-            &format!("{} records", t),
+            &format!("{t} records"),
             &desc,
             Some("diggy diggy hole"),
         ));
@@ -258,7 +263,7 @@ fn present(
     let dig_cmd = format!("`{}`", parts.join(" "));
 
     if let Some(msg) = &data.message {
-        return format!("{}\n{}", dig_cmd, msg);
+        return format!("{dig_cmd}\n{msg}");
     }
 
     if data.answer.is_empty() {
@@ -304,19 +309,23 @@ fn present(
                 "DATA".to_string(),
             ]);
             for row in rows {
-                table_rows.push(row.split('\n').map(|s| s.to_string()).collect::<Vec<_>>());
+                table_rows.push(
+                    row.split('\n')
+                        .map(std::string::ToString::to_string)
+                        .collect::<Vec<_>>(),
+                );
             }
             table::present_table(&table_rows)
         };
 
-        format!("{}\n```\n{}{}\n```", dig_cmd, rows_str, trunc_str)
+        format!("{dig_cmd}\n```\n{rows_str}{trunc_str}\n```")
     };
 
     let max_len = 4096 - if data.flags.cd { DNSSEC_WARN.len() } else { 0 };
 
     if short {
         let mut out = Vec::new();
-        for row in source_rows.iter() {
+        for row in &source_rows {
             let test = output(&[out.clone(), vec![row.clone()]].concat());
             if test.len() > max_len {
                 break;
@@ -325,13 +334,14 @@ fn present(
         }
         let mut result = output(&out);
         if data.flags.cd {
-            result.push_str(&format!("\n{DNSSEC_WARN}"));
+            use std::fmt::Write;
+            let _ = write!(result, "{DNSSEC_WARN}");
         }
         return result;
     }
 
     let mut out = Vec::new();
-    for row in data.answer.iter() {
+    for row in &data.answer {
         let row = format!("{}\n{}\n{}", row.name, row.ttl, row.data);
         let test = output(&[out.clone(), vec![row.clone()]].concat());
         if test.len() > max_len {
@@ -342,7 +352,8 @@ fn present(
 
     let mut result = output(&out);
     if data.flags.cd {
-        result.push_str(&format!("\n{DNSSEC_WARN}"));
+        use std::fmt::Write;
+        let _ = write!(result, "{DNSSEC_WARN}");
     }
     result
 }
@@ -362,7 +373,7 @@ fn components(key: &str, provider: &str) -> Vec<Component> {
     let select = SelectMenu {
         id: None,
         channel_types: None,
-        custom_id: format!("dig_provider:{}", key),
+        custom_id: format!("dig_provider:{key}"),
         default_values: None,
         disabled: false,
         kind: SelectMenuType::Text,
@@ -375,7 +386,7 @@ fn components(key: &str, provider: &str) -> Vec<Component> {
 
     let refresh = Button {
         id: None,
-        custom_id: Some(format!("dig_refresh:{}", key)),
+        custom_id: Some(format!("dig_refresh:{key}")),
         label: Some("Refresh".to_string()),
         style: ButtonStyle::Secondary,
         disabled: false,

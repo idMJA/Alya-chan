@@ -11,9 +11,9 @@ pub struct TopGgPoster {
 }
 
 impl TopGgPoster {
-    pub fn new(token: String) -> BotResult<Self> {
+    pub fn new(token: String) -> Self {
         let client = TopGgClient::new(token);
-        Ok(Self { client })
+        Self { client }
     }
 
     pub async fn start_auto_posting(
@@ -47,7 +47,7 @@ impl TopGgPoster {
             .client
             .post_stats(payload)
             .await
-            .map_err(|e| BotError::Other(format!("[Top.gg] {}", e)));
+            .map_err(|e| BotError::Other(format!("[Top.gg] {e}")));
         result?;
 
         info!(

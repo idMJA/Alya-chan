@@ -10,11 +10,11 @@ pub struct ShipCommand;
 
 #[async_trait]
 impl SlashCommand for ShipCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "ship"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Shows the probability of two users being lovers!"
     }
 
@@ -64,17 +64,21 @@ impl SlashCommand for ShipCommand {
         let name = ship_name(&u1.name, &u2.name);
         let (_emoji, msg) = love_msg(pct);
 
-        let av1 = get_avatar(&u1.avatar, uid1.get()).await;
-        let av2 = get_avatar(&u2.avatar, uid2.get()).await;
+        let av1 = get_avatar(u1.avatar.as_ref(), uid1.get()).await;
+        let av2 = get_avatar(u2.avatar.as_ref(), uid2.get()).await;
 
         let canvas = ShipCanvas::new().load_font("src/utils/fonts/norwester.otf");
         let bg_bytes = ShipCanvas::load_bg_bytes();
-        let img = canvas.generate(&u1.name, &u2.name, av1, av2, pct, bg_bytes)?;
+        let img = canvas.generate(&u1.name, &u2.name, av1, av2, pct, bg_bytes.as_deref())?;
 
         let att = Attachment::from_bytes("ship.png".to_string(), img, 1);
         let content = format!(
-            "## **{}** Ship Results\n\n👥 **{}** ❤️ **{}**\n\n### Love Percentage: **{}%**\n\n{}\n\n💡 **Fun Fact:** Ship names are created by combining parts of both usernames!",
-            name, u1.name, u2.name, pct, msg
+            "## **{name}** Ship Results\n\n👥 **{u1_name}** ❤️ **{u2_name}**\n\n### Love Percentage: **{pct}%**\n\n{msg}\n\n💡 **Fun Fact:** Ship names are created by combining parts of both usernames!",
+            name = name,
+            u1_name = u1.name,
+            u2_name = u2.name,
+            pct = pct,
+            msg = msg
         );
 
         ctx.bot
@@ -89,12 +93,9 @@ impl SlashCommand for ShipCommand {
     }
 }
 
-async fn get_avatar(hash: &Option<twilight_model::util::ImageHash>, id: u64) -> Option<Vec<u8>> {
+async fn get_avatar(hash: Option<&twilight_model::util::ImageHash>, id: u64) -> Option<Vec<u8>> {
     if let Some(h) = hash {
-        let url = format!(
-            "https://cdn.discordapp.com/avatars/{}/{}.png?size=256",
-            id, h
-        );
+        let url = format!("https://cdn.discordapp.com/avatars/{id}/{h}.png?size=256");
         if let Ok(r) = reqwest::get(&url).await {
             if let Ok(b) = r.bytes().await {
                 return Some(b.to_vec());

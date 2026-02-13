@@ -1,17 +1,23 @@
 use crate::types::{BotResult, ComponentContext, ComponentHandler};
 use async_trait::async_trait;
+use std::num::NonZeroU64;
 use twilight_model::application::interaction::InteractionData;
 use twilight_model::channel::message::component::{
-    ActionRow, Button, ButtonStyle, Component, Container, Separator, SeparatorSpacingSize,
-    TextDisplay,
+    Component, Container, Separator, SeparatorSpacingSize, TextDisplay,
+};
+use twilight_model::id::{
+    marker::{GuildMarker, UserMarker},
+    Id,
 };
 
+#[allow(dead_code)]
 pub struct ModerationConfirm;
+#[allow(dead_code)]
 pub struct ModerationCancel;
 
 #[async_trait]
 impl ComponentHandler for ModerationConfirm {
-    fn custom_id_pattern(&self) -> &str {
+    fn custom_id_pattern(&self) -> &'static str {
         "mod_confirm:*"
     }
 
@@ -35,12 +41,6 @@ impl ComponentHandler for ModerationConfirm {
 
         let guild_id_raw = guild_id_raw.unwrap();
         let target_id_raw = target_id_raw.unwrap();
-
-        use std::num::NonZeroU64;
-        use twilight_model::id::{
-            marker::{GuildMarker, UserMarker},
-            Id,
-        };
 
         let guild_id = match NonZeroU64::new(guild_id_raw) {
             Some(n) => Id::<GuildMarker>::new(n.into()),
@@ -99,7 +99,7 @@ impl ComponentHandler for ModerationConfirm {
             components: vec![
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("## Moderation\n{}", result_message),
+                    content: format!("## Moderation\n{result_message}"),
                 }),
                 Component::Separator(Separator {
                     id: None,
@@ -125,7 +125,7 @@ impl ComponentHandler for ModerationConfirm {
 
 #[async_trait]
 impl ComponentHandler for ModerationCancel {
-    fn custom_id_pattern(&self) -> &str {
+    fn custom_id_pattern(&self) -> &'static str {
         "mod_cancel:*"
     }
 

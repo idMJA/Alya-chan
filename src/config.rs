@@ -8,6 +8,8 @@ pub struct Config {
     pub color: ColorConfig,
     pub info: InfoConfig,
     pub emoji: EmojiConfig,
+    pub server: ServerConfig,
+    pub webhook: Option<WebhookConfig>,
     pub database: Option<DatabaseConfig>,
     pub global_chat: Option<GlobalChatConfig>,
     pub chatbot: Option<ChatbotConfig>,
@@ -35,6 +37,17 @@ pub struct ChatbotConfig {
 }
 
 #[derive(Debug, Clone)]
+pub struct ServerConfig {
+    pub host: String,
+    pub port: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct WebhookConfig {
+    pub vote_log: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct TopGgConfig {
     pub enabled: bool,
     pub token: String,
@@ -50,6 +63,7 @@ pub struct ColorConfig {
 #[derive(Debug, Clone)]
 pub struct InfoConfig {
     pub banner: String,
+    pub vote_url: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -106,6 +120,8 @@ pub struct EmojiConfig {
 struct RawConfig {
     color: RawColor,
     info: RawInfo,
+    server: Option<RawServer>,
+    webhook: Option<RawWebhook>,
     emoji: Option<RawEmoji>,
     database: Option<RawDatabase>,
     global_chat: Option<RawGlobalChat>,
@@ -122,10 +138,32 @@ struct RawGlobalChat {
 }
 
 #[derive(Deserialize)]
+struct RawServer {
+    #[serde(default = "default_host")]
+    host: String,
+    #[serde(default = "default_port")]
+    port: u16,
+}
+
+impl Default for RawServer {
+    fn default() -> Self {
+        Self {
+            host: default_host(),
+            port: default_port(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
 struct RawDatabase {
     local_path: Option<String>,
     remote_url: Option<String>,
     remote_token: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RawWebhook {
+    vote_log: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -150,6 +188,7 @@ struct RawColor {
 #[derive(Deserialize)]
 struct RawInfo {
     banner: String,
+    vote_url: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -205,25 +244,23 @@ struct RawEmoji {
 impl Config {
     pub fn load_from_path(path: &str) -> Result<Self> {
         let content = fs::read_to_string(path)
-            .with_context(|| format!("Config file not found or unreadable: {}", path))?;
+            .with_context(|| format!("Config file not found or unreadable: {path}"))?;
 
         let raw: RawConfig = toml::from_str(&content)
-            .with_context(|| format!("Failed to parse TOML in config file: {}", path))?;
+            .with_context(|| format!("Failed to parse TOML in config file: {path}"))?;
 
-        let primary = match parse_color_value(&raw.color.primary) {
-            Some(v) => v,
-            None => anyhow::bail!("Invalid or missing color.primary in config.toml"),
+        let Some(primary) = parse_color_value(&raw.color.primary) else {
+            anyhow::bail!("Invalid or missing color.primary in config.toml")
         };
 
-        let no = match parse_color_value(&raw.color.no) {
-            Some(v) => v,
-            None => anyhow::bail!("Invalid or missing color.no in config.toml"),
+        let Some(no) = parse_color_value(&raw.color.no) else {
+            anyhow::bail!("Invalid or missing color.no in config.toml")
         };
 
         let banner = {
             let b = raw.info.banner;
             let parsed = Url::parse(&b)
-                .with_context(|| format!("Invalid URL for config.info.banner: {}", b))?;
+                .with_context(|| format!("Invalid URL for config.info.banner: {b}"))?;
             let scheme = parsed.scheme();
             if scheme != "http" && scheme != "https" {
                 anyhow::bail!("Unsupported URL scheme for config.info.banner: {}", b);
@@ -237,146 +274,159 @@ impl Config {
                 emoji.yes = s
             }
             if let Some(s) = r.no {
-                emoji.no = s
+                emoji.no = s;
             }
             if let Some(s) = r.link {
-                emoji.link = s
+                emoji.link = s;
             }
             if let Some(s) = r.party {
-                emoji.party = s
+                emoji.party = s;
             }
             if let Some(s) = r.artist {
-                emoji.artist = s
+                emoji.artist = s;
             }
             if let Some(s) = r.clock {
-                emoji.clock = s
+                emoji.clock = s;
             }
             if let Some(s) = r.user {
-                emoji.user = s
+                emoji.user = s;
             }
             if let Some(s) = r.info {
-                emoji.info = s
+                emoji.info = s;
             }
             if let Some(s) = r.music {
-                emoji.music = s
+                emoji.music = s;
             }
             if let Some(s) = r.warn {
-                emoji.warn = s
+                emoji.warn = s;
             }
             if let Some(s) = r.home {
-                emoji.home = s
+                emoji.home = s;
             }
             if let Some(s) = r.globe {
-                emoji.globe = s
+                emoji.globe = s;
             }
             if let Some(s) = r.slash {
-                emoji.slash = s
+                emoji.slash = s;
             }
             if let Some(s) = r.ping {
-                emoji.ping = s
+                emoji.ping = s;
             }
             if let Some(s) = r.question {
-                emoji.question = s
+                emoji.question = s;
             }
             if let Some(s) = r.pencil {
-                emoji.pencil = s
+                emoji.pencil = s;
             }
             if let Some(s) = r.think {
-                emoji.think = s
+                emoji.think = s;
             }
             if let Some(s) = r.heart {
-                emoji.heart = s
+                emoji.heart = s;
             }
             if let Some(s) = r.folder {
-                emoji.folder = s
+                emoji.folder = s;
             }
             if let Some(s) = r.play {
-                emoji.play = s
+                emoji.play = s;
             }
             if let Some(s) = r.pause {
-                emoji.pause = s
+                emoji.pause = s;
             }
             if let Some(s) = r.stop {
-                emoji.stop = s
+                emoji.stop = s;
             }
             if let Some(s) = r.skip {
-                emoji.skip = s
+                emoji.skip = s;
             }
             if let Some(s) = r.previous {
-                emoji.previous = s
+                emoji.previous = s;
             }
             if let Some(s) = r.rewind {
-                emoji.rewind = s
+                emoji.rewind = s;
             }
             if let Some(s) = r.forward {
-                emoji.forward = s
+                emoji.forward = s;
             }
             if let Some(s) = r.r#loop {
-                emoji.looping = s
+                emoji.looping = s;
             }
             if let Some(s) = r.shuffle {
-                emoji.shuffle = s
+                emoji.shuffle = s;
             }
             if let Some(s) = r.vol_up {
-                emoji.vol_up = s
+                emoji.vol_up = s;
             }
             if let Some(s) = r.vol_down {
-                emoji.vol_down = s
+                emoji.vol_down = s;
             }
             if let Some(s) = r.list {
-                emoji.list = s
+                emoji.list = s;
             }
             if let Some(s) = r.trash {
-                emoji.trash = s
+                emoji.trash = s;
             }
             if let Some(s) = r.node_on {
-                emoji.node_on = s
+                emoji.node_on = s;
             }
             if let Some(s) = r.node_off {
-                emoji.node_off = s
+                emoji.node_off = s;
             }
             if let Some(s) = r.robot {
-                emoji.robot = s
+                emoji.robot = s;
             }
             if let Some(s) = r.arrow_right {
-                emoji.arrow_right = s
+                emoji.arrow_right = s;
             }
             if let Some(s) = r.newspaper {
-                emoji.newspaper = s
+                emoji.newspaper = s;
             }
             if let Some(s) = r.settings {
-                emoji.settings = s
+                emoji.settings = s;
             }
             if let Some(s) = r.chat {
-                emoji.chat = s
+                emoji.chat = s;
             }
             if let Some(s) = r.office {
-                emoji.office = s
+                emoji.office = s;
             }
             if let Some(s) = r.ribbon {
-                emoji.ribbon = s
+                emoji.ribbon = s;
             }
             if let Some(s) = r.twilight {
-                emoji.twilight = s
+                emoji.twilight = s;
             }
             if let Some(s) = r.tokio {
-                emoji.tokio = s
+                emoji.tokio = s;
             }
             if let Some(s) = r.libsql {
-                emoji.libsql = s
+                emoji.libsql = s;
             }
             if let Some(s) = r.tracing {
-                emoji.tracing = s
+                emoji.tracing = s;
             }
             if let Some(s) = r.world {
-                emoji.world = s
+                emoji.world = s;
             }
         }
 
         Ok(Self {
             color: ColorConfig { primary, no },
-            info: InfoConfig { banner },
+            info: InfoConfig {
+                banner,
+                vote_url: raw.info.vote_url,
+            },
             emoji,
+            server: {
+                let srv = raw.server.unwrap_or_default();
+                ServerConfig {
+                    host: srv.host,
+                    port: srv.port,
+                }
+            },
+            webhook: raw.webhook.map(|wh| WebhookConfig {
+                vote_log: wh.vote_log,
+            }),
             global_chat: raw.global_chat.map(|gc| GlobalChatConfig {
                 enabled: gc.enabled,
                 api_url: gc.api_url,
@@ -521,6 +571,7 @@ impl Config {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn load_emoji_overrides(cfg: &mut Config) {
     if let Ok(content) = fs::read_to_string("./emoji.toml") {
         #[derive(Deserialize)]
@@ -531,155 +582,151 @@ fn load_emoji_overrides(cfg: &mut Config) {
         if let Ok(wrapper) = toml::from_str::<EmojiFile>(&content) {
             let r = wrapper.emoji;
             if let Some(s) = r.yes {
-                cfg.emoji.yes = s
+                cfg.emoji.yes = s;
             }
             if let Some(s) = r.no {
-                cfg.emoji.no = s
+                cfg.emoji.no = s;
             }
             if let Some(s) = r.link {
-                cfg.emoji.link = s
+                cfg.emoji.link = s;
             }
             if let Some(s) = r.party {
-                cfg.emoji.party = s
+                cfg.emoji.party = s;
             }
             if let Some(s) = r.artist {
-                cfg.emoji.artist = s
+                cfg.emoji.artist = s;
             }
             if let Some(s) = r.clock {
-                cfg.emoji.clock = s
+                cfg.emoji.clock = s;
             }
             if let Some(s) = r.user {
-                cfg.emoji.user = s
+                cfg.emoji.user = s;
             }
             if let Some(s) = r.info {
-                cfg.emoji.info = s
+                cfg.emoji.info = s;
             }
             if let Some(s) = r.music {
-                cfg.emoji.music = s
+                cfg.emoji.music = s;
             }
             if let Some(s) = r.warn {
-                cfg.emoji.warn = s
+                cfg.emoji.warn = s;
             }
             if let Some(s) = r.home {
-                cfg.emoji.home = s
+                cfg.emoji.home = s;
             }
             if let Some(s) = r.globe {
-                cfg.emoji.globe = s
+                cfg.emoji.globe = s;
             }
             if let Some(s) = r.slash {
-                cfg.emoji.slash = s
+                cfg.emoji.slash = s;
             }
             if let Some(s) = r.ping {
-                cfg.emoji.ping = s
+                cfg.emoji.ping = s;
             }
             if let Some(s) = r.question {
-                cfg.emoji.question = s
+                cfg.emoji.question = s;
             }
             if let Some(s) = r.pencil {
-                cfg.emoji.pencil = s
+                cfg.emoji.pencil = s;
             }
             if let Some(s) = r.think {
-                cfg.emoji.think = s
+                cfg.emoji.think = s;
             }
             if let Some(s) = r.heart {
-                cfg.emoji.heart = s
+                cfg.emoji.heart = s;
             }
             if let Some(s) = r.folder {
-                cfg.emoji.folder = s
+                cfg.emoji.folder = s;
             }
             if let Some(s) = r.play {
-                cfg.emoji.play = s
+                cfg.emoji.play = s;
             }
             if let Some(s) = r.pause {
-                cfg.emoji.pause = s
+                cfg.emoji.pause = s;
             }
             if let Some(s) = r.stop {
-                cfg.emoji.stop = s
+                cfg.emoji.stop = s;
             }
             if let Some(s) = r.skip {
-                cfg.emoji.skip = s
+                cfg.emoji.skip = s;
             }
             if let Some(s) = r.previous {
-                cfg.emoji.previous = s
+                cfg.emoji.previous = s;
             }
             if let Some(s) = r.rewind {
-                cfg.emoji.rewind = s
+                cfg.emoji.rewind = s;
             }
             if let Some(s) = r.forward {
-                cfg.emoji.forward = s
+                cfg.emoji.forward = s;
             }
             if let Some(s) = r.r#loop {
-                cfg.emoji.looping = s
+                cfg.emoji.looping = s;
             }
             if let Some(s) = r.shuffle {
-                cfg.emoji.shuffle = s
+                cfg.emoji.shuffle = s;
             }
             if let Some(s) = r.vol_up {
-                cfg.emoji.vol_up = s
+                cfg.emoji.vol_up = s;
             }
             if let Some(s) = r.vol_down {
-                cfg.emoji.vol_down = s
+                cfg.emoji.vol_down = s;
             }
             if let Some(s) = r.list {
-                cfg.emoji.list = s
+                cfg.emoji.list = s;
             }
             if let Some(s) = r.trash {
-                cfg.emoji.trash = s
+                cfg.emoji.trash = s;
             }
             if let Some(s) = r.node_on {
-                cfg.emoji.node_on = s
+                cfg.emoji.node_on = s;
             }
             if let Some(s) = r.node_off {
-                cfg.emoji.node_off = s
+                cfg.emoji.node_off = s;
             }
             if let Some(s) = r.robot {
-                cfg.emoji.robot = s
+                cfg.emoji.robot = s;
             }
             if let Some(s) = r.arrow_right {
-                cfg.emoji.arrow_right = s
+                cfg.emoji.arrow_right = s;
             }
             if let Some(s) = r.newspaper {
-                cfg.emoji.newspaper = s
+                cfg.emoji.newspaper = s;
             }
             if let Some(s) = r.settings {
-                cfg.emoji.settings = s
+                cfg.emoji.settings = s;
             }
             if let Some(s) = r.chat {
-                cfg.emoji.chat = s
+                cfg.emoji.chat = s;
             }
             if let Some(s) = r.office {
-                cfg.emoji.office = s
+                cfg.emoji.office = s;
             }
             if let Some(s) = r.ribbon {
-                cfg.emoji.ribbon = s
+                cfg.emoji.ribbon = s;
             }
             if let Some(s) = r.twilight {
-                cfg.emoji.twilight = s
+                cfg.emoji.twilight = s;
             }
             if let Some(s) = r.tokio {
-                cfg.emoji.tokio = s
+                cfg.emoji.tokio = s;
             }
             if let Some(s) = r.libsql {
-                cfg.emoji.libsql = s
+                cfg.emoji.libsql = s;
             }
             if let Some(s) = r.tracing {
-                cfg.emoji.tracing = s
+                cfg.emoji.tracing = s;
             }
             if let Some(s) = r.world {
-                cfg.emoji.world = s
+                cfg.emoji.world = s;
             }
         }
     }
 }
 
 fn parse_color_value(v: &toml::Value) -> Option<u32> {
-    if let Some(i) = v.as_integer() {
-        Some(i as u32)
-    } else if let Some(s) = v.as_str() {
-        parse_color_str(s)
-    } else {
-        None
-    }
+    v.as_integer()
+        .and_then(|i| u32::try_from(i).ok())
+        .or_else(|| v.as_str().and_then(parse_color_str))
 }
 
 fn parse_color_str(s: &str) -> Option<u32> {
@@ -687,4 +734,12 @@ fn parse_color_str(s: &str) -> Option<u32> {
     let s = s.strip_prefix('#').unwrap_or(s);
     let s = s.strip_prefix("0x").unwrap_or(s);
     u32::from_str_radix(s, 16).ok()
+}
+
+fn default_host() -> String {
+    "127.0.0.1".to_string()
+}
+
+const fn default_port() -> u16 {
+    3000
 }

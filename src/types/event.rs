@@ -3,13 +3,12 @@ use async_trait::async_trait;
 use twilight_model::gateway::event::Event;
 
 pub struct EventContext {
-    #[allow(dead_code)]
     pub bot: BotContext,
     pub event: Event,
 }
 
 impl EventContext {
-    pub fn new(bot: BotContext, event: Event) -> Self {
+    pub const fn new(bot: BotContext, event: Event) -> Self {
         Self { bot, event }
     }
 }

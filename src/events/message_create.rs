@@ -8,7 +8,7 @@ pub struct MessageCreateHandler;
 
 #[async_trait]
 impl EventHandler for MessageCreateHandler {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "message_create"
     }
 

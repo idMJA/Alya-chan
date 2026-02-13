@@ -3,6 +3,7 @@ use hickory_proto::op::{Message, MessageType, OpCode, Query};
 use hickory_proto::rr::{Name, RData, RecordType};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::fmt::Write;
 use std::str::FromStr;
 
 #[derive(Clone, Debug)]
@@ -66,7 +67,7 @@ pub async fn lookup(domain: &str, t: &str, ep: &Endpoint, flags: Flags) -> Looku
 
 async fn lookup_json(domain: &str, t: &str, ep: &Endpoint, flags: Flags) -> Lookup {
     let mut url = format!("{}?name={}&type={}", ep.endpoint, domain, t);
-    url.push_str(&format!("&cd={}", flags.cd));
+    let _ = write!(url, "&cd={}", flags.cd);
 
     let res = reqwest::Client::new()
         .get(url)
@@ -76,12 +77,15 @@ async fn lookup_json(domain: &str, t: &str, ep: &Endpoint, flags: Flags) -> Look
 
     if let Ok(res) = res {
         if let Ok(json) = res.json::<serde_json::Value>().await {
-            let status = json.get("Status").and_then(|v| v.as_u64()).unwrap_or(0);
+            let status = json
+                .get("Status")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
             if status != 0 {
                 return Lookup {
                     name: domain.to_string(),
                     flags,
-                    message: Some(rcode(status as u16)),
+                    message: Some(rcode(u16::try_from(status).unwrap_or(0))),
                     answer: vec![],
                 };
             }
@@ -90,7 +94,12 @@ async fn lookup_json(domain: &str, t: &str, ep: &Endpoint, flags: Flags) -> Look
             if let Some(arr) = json.get("Answer").and_then(|v| v.as_array()) {
                 for a in arr {
                     let name = a.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                    let ttl = a.get("TTL").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                    let ttl = u32::try_from(
+                        a.get("TTL")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0),
+                    )
+                    .unwrap_or(0);
                     let data = a
                         .get("data")
                         .and_then(|v| v.as_str())
@@ -122,16 +131,13 @@ async fn lookup_json(domain: &str, t: &str, ep: &Endpoint, flags: Flags) -> Look
 }
 
 async fn lookup_dns(domain: &str, t: &str, ep: &Endpoint, flags: Flags) -> Lookup {
-    let name = match Name::from_utf8(domain) {
-        Ok(v) => v,
-        Err(_) => {
-            return Lookup {
-                name: domain.to_string(),
-                flags,
-                message: Some("An unexpected error occurred".to_string()),
-                answer: vec![],
-            }
-        }
+    let Ok(name) = Name::from_utf8(domain) else {
+        return Lookup {
+            name: domain.to_string(),
+            flags,
+            message: Some("An unexpected error occurred".to_string()),
+            answer: vec![],
+        };
     };
 
     let mut msg = Message::new();
@@ -146,7 +152,7 @@ async fn lookup_dns(domain: &str, t: &str, ep: &Endpoint, flags: Flags) -> Looku
     let packet = msg.to_vec().unwrap_or_default();
     let encoded = URL_SAFE_NO_PAD.encode(packet);
 
-    let mut url = format!("{}?dns={}", ep.endpoint, encoded);
+    let url = format!("{}?dns={}", ep.endpoint, encoded);
 
     let res = reqwest::Client::new()
         .get(url)
@@ -207,5 +213,5 @@ fn rcode(code: u16) -> String {
             return v.to_string();
         }
     }
-    format!("An unexpected error occurred [{}]", code)
+    format!("An unexpected error occurred [{code}]")
 }

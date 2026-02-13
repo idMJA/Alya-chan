@@ -245,11 +245,11 @@ impl AboutCommand {
 
 #[async_trait]
 impl SlashCommand for AboutCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "about"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Show information about Alya-chan"
     }
 
@@ -284,8 +284,8 @@ impl SlashCommand for AboutCommand {
         tokio::spawn(async move {
             sleep(Duration::from_secs(60)).await;
 
-            let container = AboutCommand::create_about_container(color, &emoji);
-            let button_row = AboutCommand::create_button_row("about", true);
+            let container = Self::create_about_container(color, &emoji);
+            let button_row = Self::create_button_row("about", true);
             let components = vec![Component::Container(container), button_row];
 
             let _ = http
@@ -304,7 +304,7 @@ pub struct AboutButton;
 
 #[async_trait]
 impl ComponentHandler for AboutButton {
-    fn custom_id_pattern(&self) -> &str {
+    fn custom_id_pattern(&self) -> &'static str {
         "about_btn_*"
     }
 

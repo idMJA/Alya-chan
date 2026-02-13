@@ -47,8 +47,7 @@ fn build_safe_message(
         author
             .avatar
             .as_ref()
-            .map(|a| a.to_string())
-            .unwrap_or_else(|| "default".to_string())
+            .map_or_else(|| "default".to_string(), std::string::ToString::to_string)
     );
 
     json!({
@@ -77,6 +76,7 @@ fn build_safe_message(
     })
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotResult<()> {
     let gc_config = match &ctx.bot.config.global_chat {
         Some(gc) if gc.enabled => gc,
@@ -100,7 +100,7 @@ pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotR
         .json(&body);
 
     if let Some(key) = &gc_config.api_key {
-        req = req.header("Authorization", format!("Bearer {}", key));
+        req = req.header("Authorization", format!("Bearer {key}"));
     }
 
     let resp = req
@@ -124,12 +124,12 @@ pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotR
             let total = data
                 .get("deliveryStats")
                 .and_then(|ds| ds.get("total"))
-                .and_then(|t| t.as_u64())
+                .and_then(serde_json::Value::as_u64)
                 .unwrap_or(0);
             let rate = data
                 .get("deliveryStats")
                 .and_then(|ds| ds.get("successRate"))
-                .and_then(|r| r.as_f64())
+                .and_then(serde_json::Value::as_f64)
                 .unwrap_or(0.0);
             tracing::info!("Message broadcasted successfully to {} servers", total);
             tracing::info!("Success rate: {}%", rate);
@@ -146,12 +146,12 @@ pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotR
             let successful = data
                 .get("deliveryStats")
                 .and_then(|ds| ds.get("successful"))
-                .and_then(|s| s.as_u64())
+                .and_then(serde_json::Value::as_u64)
                 .unwrap_or(0);
             let total = data
                 .get("deliveryStats")
                 .and_then(|ds| ds.get("total"))
-                .and_then(|t| t.as_u64())
+                .and_then(serde_json::Value::as_u64)
                 .unwrap_or(0);
             tracing::info!("Partially delivered: {}/{}", successful, total);
 
@@ -165,7 +165,7 @@ pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotR
                     tracing::warn!("Failed guilds: {}", names);
                 }
 
-                let failed_guilds = failed.to_vec();
+                let failed_guilds = failed.clone();
                 let http = ctx.bot.http.clone();
                 let api_url = gc_config.api_url.clone();
                 let api_key = gc_config.api_key.clone();
@@ -194,7 +194,7 @@ pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotR
                     tracing::error!("Failed guilds: {}", errs);
                 }
 
-                let failed_guilds = failed.to_vec();
+                let failed_guilds = failed.clone();
                 let http = ctx.bot.http.clone();
                 let api_url = gc_config.api_url.clone();
                 let api_key = gc_config.api_key.clone();
@@ -226,6 +226,7 @@ pub async fn handle_global_chat(ctx: &EventContext, msg: &MessageCreate) -> BotR
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn handle_failed_guilds(
     failed_guilds: &[serde_json::Value],
     http: &std::sync::Arc<twilight_http::Client>,
@@ -255,12 +256,12 @@ async fn handle_failed_guilds(
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("Content-Type", "application/json".parse().unwrap());
         if let Some(key) = &api_key {
-            headers.insert("Authorization", format!("Bearer {}", key).parse().unwrap());
+            headers.insert("Authorization", format!("Bearer {key}").parse().unwrap());
         }
 
         let client = reqwest::Client::new();
         let guild_list_resp = client
-            .get(format!("{}/list", api_url))
+            .get(format!("{api_url}/list"))
             .headers(headers.clone())
             .send()
             .await;
@@ -299,37 +300,35 @@ async fn handle_failed_guilds(
                     .find(|g| g.get("id").and_then(|id| id.as_str()) == Some(guild_id_str))
             });
 
-        let global_channel_id = match guild_info.and_then(|gi| gi.get("globalChannelId")) {
-            Some(id) => match id.as_str() {
-                Some(s) => s,
-                None => {
+        let global_channel_id =
+            if let Some(id) = guild_info.and_then(|gi| gi.get("globalChannelId")) {
+                if let Some(s) = id.as_str() {
+                    s
+                } else {
                     tracing::warn!(
                         "❌ Could not find valid global channel ID for guild {}",
                         guild_id_str
                     );
                     continue;
                 }
-            },
-            None => {
+            } else {
                 tracing::warn!(
                     "❌ Could not find guild info for {} ({})",
                     guild_name,
                     guild_id_str
                 );
                 continue;
-            }
-        };
+            };
 
-        let channel_id = match global_channel_id.parse::<u64>() {
-            Ok(id) => twilight_model::id::Id::new(id),
-            Err(_) => {
-                tracing::error!(
-                    "❌ Invalid channel ID format for guild {}: {}",
-                    guild_name,
-                    global_channel_id
-                );
-                continue;
-            }
+        let channel_id = if let Ok(id) = global_channel_id.parse::<u64>() {
+            twilight_model::id::Id::new(id)
+        } else {
+            tracing::error!(
+                "❌ Invalid channel ID format for guild {}: {}",
+                guild_name,
+                global_channel_id
+            );
+            continue;
         };
 
         let webhook_result = http.create_webhook(channel_id, "Alya Global Chat").await;
@@ -363,7 +362,7 @@ async fn handle_failed_guilds(
         });
 
         let update_resp = client
-            .post(format!("{}/add", api_url))
+            .post(format!("{api_url}/add"))
             .headers(headers.clone())
             .json(&update_body)
             .send()

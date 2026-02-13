@@ -15,17 +15,17 @@ const HISTORY_TTL_MINUTES: i64 = 10;
 // In-memory chat history storage
 type ChatHistory = Arc<RwLock<HashMap<String, Vec<(String, String, DateTime<Utc>)>>>>;
 
-fn load_alya_system_message() -> String {
-    match fs::read_to_string("src/models/alya-multi.txt") {
-        Ok(content) => content,
-        Err(e) => {
-            tracing::warn!("Failed to load alya-multi.txt: {}, using fallback", e);
+static CHAT_HISTORY: tokio::sync::OnceCell<ChatHistory> = tokio::sync::OnceCell::const_new();
 
-            "You are Alya, a helpful and friendly Discord bot assistant. You are cheerful, knowledgeable, and always ready to help users with their questions. Keep responses concise and friendly.".to_string()
-        }
-    }
+fn load_alya_system_message() -> String {
+    fs::read_to_string("src/models/alya-multi.txt").unwrap_or_else(|e| {
+        tracing::warn!("Failed to load alya-multi.txt: {}, using fallback", e);
+
+        "You are Alya, a helpful and friendly Discord bot assistant. You are cheerful, knowledgeable, and always ready to help users with their questions. Keep responses concise and friendly.".to_string()
+    })
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResult<()> {
     let chatbot_config = match &ctx.bot.config.chatbot {
         Some(cb) if cb.enabled => cb,
@@ -40,9 +40,8 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         return Ok(());
     }
 
-    let guild_id = match msg.guild_id {
-        Some(id) => id,
-        None => return Ok(()),
+    let Some(guild_id) = msg.guild_id else {
+        return Ok(());
     };
 
     let db = AlyaDatabase::get().map_err(|e| BotError::Other(e.to_string()))?;
@@ -72,11 +71,10 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
 
     let is_bot_mentioned = msg.mentions.iter().any(|u| u.id == ctx.bot.bot_user.id);
 
-    let is_replying_to_bot = if let Some(referenced_msg) = &msg.referenced_message {
-        referenced_msg.author.id == ctx.bot.bot_user.id
-    } else {
-        false
-    };
+    let is_replying_to_bot = msg
+        .referenced_message
+        .as_ref()
+        .is_some_and(|referenced_msg| referenced_msg.author.id == ctx.bot.bot_user.id);
 
     let should_respond = if is_alya_mentioned || is_bot_mentioned || is_replying_to_bot {
         tracing::debug!("Responding: alya mentioned, bot mentioned, or replied");
@@ -102,7 +100,6 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
     let system_message = load_alya_system_message();
 
     // Use in-memory chat history (no DB persistence)
-    static CHAT_HISTORY: tokio::sync::OnceCell<ChatHistory> = tokio::sync::OnceCell::const_new();
     let history_store = CHAT_HISTORY
         .get_or_init(|| async { Arc::new(RwLock::new(HashMap::new())) })
         .await;
@@ -132,19 +129,20 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         }
     }
 
-    let now = Utc::now();
-
     // Build user message content (include replied message if exists)
-    let mut user_message_content = msg.content.clone();
+    let user_message_content = msg.referenced_message.as_ref().map_or_else(
+        || msg.content.clone(),
+        |referenced_msg| {
+            let replied_content = &referenced_msg.content;
+            let replied_author = &referenced_msg.author.name;
+            format!(
+                "[Replying to {}: \"{}\"]\n\n{}",
+                replied_author, replied_content, msg.content
+            )
+        },
+    );
 
-    if let Some(referenced_msg) = &msg.referenced_message {
-        let replied_content = &referenced_msg.content;
-        let replied_author = &referenced_msg.author.name;
-        user_message_content = format!(
-            "[Replying to {}: \"{}\"]\n\n{}",
-            replied_author, replied_content, msg.content
-        );
-    }
+    let now = Utc::now();
 
     // Append current user message to payload
     messages.push(json!({

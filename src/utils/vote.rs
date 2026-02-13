@@ -1,17 +1,111 @@
 use crate::types::context::BotContext;
 use anyhow::{anyhow, Result};
+use serde_json::json;
+use std::num::NonZeroU64;
 use std::sync::Arc;
 use topgg::{Vote, VoteHandler};
 
-/// Axum-compatible vote handler for top.gg webhooks
 pub struct AlyaVoteHandler {
     pub context: Arc<BotContext>,
 }
 
+async fn send_vote_webhook(context: &Arc<BotContext>, voter_id: u64) {
+    let webhook_url = match &context.config.webhook {
+        Some(wh) => wh.vote_log.as_ref(),
+        None => return,
+    };
+
+    let Some(webhook_url) = webhook_url else {
+        return;
+    };
+
+    let voter = match context
+        .http
+        .user(
+            NonZeroU64::new(voter_id)
+                .expect("voter_id should be non-zero")
+                .into(),
+        )
+        .await
+    {
+        Ok(response) => match response.model().await {
+            Ok(user) => user,
+            Err(e) => {
+                tracing::warn!("[Top.gg] Failed to get voter user model: {}", e);
+                return;
+            }
+        },
+        Err(e) => {
+            tracing::warn!("[Top.gg] Failed to fetch voter user: {}", e);
+            return;
+        }
+    };
+
+    let voter_avatar_url = if let Some(avatar) = &voter.avatar {
+        format!(
+            "https://cdn.discordapp.com/avatars/{}/{}.webp",
+            voter.id, avatar
+        )
+    } else {
+        format!(
+            "https://cdn.discordapp.com/embed/avatars/{}.png",
+            voter.id.get() % 5
+        )
+    };
+
+    let bot_avatar_url = context.bot_user.avatar.as_ref().map(|avatar| {
+        format!(
+            "https://cdn.discordapp.com/avatars/{}/{}.webp",
+            context.bot_user.id, avatar
+        )
+    });
+
+    let author_name = voter.global_name.as_ref().unwrap_or(&voter.name);
+
+    let embed = json!({
+        "color": context.config.color.primary,
+        "author": {
+            "name": author_name,
+            "icon_url": voter_avatar_url,
+        },
+        "thumbnail": {
+            "url": voter_avatar_url
+        },
+        "description": format!(
+            "{} **{}** `({})` just rocked the vote for Alya on [Top.gg]({})!\n\nYou're awesome for choosing us! May your day be filled with fantastic tunes and good vibes. Let's keep the music playing!",
+            context.config.emoji.party,
+            voter.name,
+            voter.id,
+            context.config.info.vote_url
+        ),
+        "footer": {
+            "text": "Thanks for choosing Alya!"
+        },
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    });
+
+    let mut payload = json!({
+        "username": &context.bot_user.name,
+        "content": format!("<@{}>", voter_id),
+        "embeds": [embed]
+    });
+
+    if let Some(avatar_url) = bot_avatar_url {
+        payload["avatar_url"] = json!(avatar_url);
+    }
+
+    if let Err(e) = reqwest::Client::new()
+        .post(webhook_url)
+        .json(&payload)
+        .send()
+        .await
+    {
+        tracing::warn!("[Top.gg] Failed to send vote webhook: {}", e);
+    }
+}
+
 #[async_trait::async_trait]
 impl VoteHandler for AlyaVoteHandler {
-    /// Called when a vote is received and authenticated.
-    /// Automatically handles authentication and 200 OK response.
     async fn voted(&self, vote: Vote) {
         tracing::info!(
             "[Top.gg] Received vote: voter_id={} receiver_id={} is_server={} is_test={} is_weekend={}",
@@ -22,61 +116,31 @@ impl VoteHandler for AlyaVoteHandler {
             vote.is_weekend
         );
 
-        // Skip recording test votes
         if vote.is_test {
             tracing::info!("[Top.gg] Skipped test webhook from user {}", vote.voter_id);
             return;
         }
 
-        // Record vote in database
         let user_id = vote.voter_id.to_string();
         match self.context.database.add_user_vote(&user_id).await {
-            Ok(_) => {
+            Ok(()) => {
                 tracing::info!("[Top.gg] Successfully recorded vote for user {}", user_id);
             }
             Err(e) => {
                 tracing::error!("[Top.gg] Failed to record vote for user {}: {}", user_id, e);
+                return;
             }
         }
 
-        // TODO: send a DM/notification to the user
+        send_vote_webhook(&self.context, vote.voter_id).await;
     }
 }
 
-/// Create a vote handler for top.gg webhook events.
-///
-/// # Arguments
-///
-/// - `context` - Reference to the bot context (contains config and database)
-///
-/// # Returns
-///
-/// An `AlyaVoteHandler` that implements the `VoteHandler` trait.
-/// Mount this with `topgg::axum::webhook(webhook_auth, Arc::new(handler))` at your preferred path.
-///
-/// # Example
-///
-/// ```ignore
-/// let handler = create_topgg_vote_handler(context);
-/// let webhook_router = topgg::axum::webhook(webhook_auth, Arc::new(handler));
-/// // Mount webhook_router in your axum app
-/// ```
-pub fn create_topgg_vote_handler(context: Arc<BotContext>) -> AlyaVoteHandler {
+pub const fn create_topgg_vote_handler(context: Arc<BotContext>) -> AlyaVoteHandler {
     AlyaVoteHandler { context }
 }
 
-/// Handle an incoming top.gg webhook payload (deprecated: use axum integration instead).
-///
-/// - `body` is the raw JSON body from the webhook
-/// - `auth_header` is the value of the `Authorization` header (should be `webhook_auth` from config)
-///
-/// Behavior:
-/// - verify the webhook auth header matches `ctx.config.top_gg.webhook_auth` and that top.gg is enabled
-/// - parse the payload
-/// - for a real vote (not a test), record the vote in DB using `add_user_vote`
-///
-/// Note: Sending a DM/notification is left intentionally minimal (see TODO) to avoid
-/// adding fragile dependencies here — for now we persist the vote and log it.
+#[allow(dead_code)]
 pub async fn handle_topgg_webhook(
     ctx: &BotContext,
     body: &str,
@@ -89,13 +153,12 @@ pub async fn handle_topgg_webhook(
 
     let provided = auth_header.unwrap_or("");
 
-    // Webhook auth check: top.gg sends the webhook auth password via `Authorization` header
     if provided != cfg.webhook_auth {
         return Err(anyhow!("invalid top.gg webhook auth token"));
     }
 
     let vote: Vote =
-        serde_json::from_str(body).map_err(|e| anyhow!("failed to parse top.gg payload: {}", e))?;
+        serde_json::from_str(body).map_err(|e| anyhow!("failed to parse top.gg payload: {e}"))?;
 
     tracing::info!(
         "[Top.gg] Received webhook: voter_id={} receiver_id={} is_server={} is_test={} is_weekend={}",
@@ -111,15 +174,10 @@ pub async fn handle_topgg_webhook(
         return Ok(());
     }
 
-    // Record vote in DB (gives the user VOTE_PREMIUM_DURATION_HOURS premium)
     ctx.database
         .add_user_vote(&vote.voter_id.to_string())
         .await?;
     tracing::info!("[Top.gg] Recorded vote for user {}", vote.voter_id);
-
-    // TODO: send a DM/notification to the user (requires a stable behavior
-    // for creating a private channel / message builder with twilight_http). For
-    // now we keep this minimal and just log + persist the vote.
 
     Ok(())
 }

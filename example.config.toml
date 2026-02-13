@@ -14,6 +14,18 @@ no = "#ff0000"
 [info]
 # Banner image shown on the help menu
 banner = "https://i.ibb.co/hrpKCdy/e1da98e96fdfc12635909f99725d971e.png"
+# Top.gg bot page URL
+vote_url = "https://top.gg/bot/<YOUR_BOT_ID>"
+
+[server]
+# Webhook server host (default: 127.0.0.1)
+host = "127.0.0.1"
+# Webhook server port (default: 3000)
+port = 3000
+
+[webhook]
+# Discord webhook URL for vote log notifications (optional)
+vote_log = ""
 
 [global_chat] # Internal global chat configuration
 # Enable or disable the global chat feature

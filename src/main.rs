@@ -13,9 +13,11 @@ use std::env;
 use std::sync::Arc;
 
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
-use twilight_gateway::{Event, EventTypeFlags, Shard, ShardId, StreamExt};
+use twilight_gateway::{ConfigBuilder, Event, EventTypeFlags, Shard, ShardId, StreamExt};
 use twilight_http::Client as HttpClient;
 use twilight_model::application::interaction::{InteractionData, InteractionType};
+use twilight_model::gateway::payload::outgoing::update_presence::UpdatePresencePayload;
+use twilight_model::gateway::presence::{Activity, ActivityType, Status};
 use twilight_standby::Standby;
 
 use crate::commands::HelpCommand;
@@ -29,6 +31,7 @@ use types::SlashCommandContext;
 use utils::init_logger;
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
@@ -53,9 +56,7 @@ async fn main() -> Result<()> {
     );
 
     let db_config = config.database.as_ref();
-    let local_path = db_config
-        .map(|d| d.local_path.as_str())
-        .unwrap_or("data/alya.db");
+    let local_path = db_config.map_or("data/alya.db", |d| d.local_path.as_str());
 
     // Create data directory if it doesn't exist
     if let Some(parent) = std::path::Path::new(local_path).parent() {
@@ -128,10 +129,6 @@ async fn main() -> Result<()> {
 
     let intents = get_default_intents();
 
-    use twilight_gateway::ConfigBuilder;
-    use twilight_model::gateway::payload::outgoing::update_presence::UpdatePresencePayload;
-    use twilight_model::gateway::presence::{Activity, ActivityType, Status};
-
     let initial_activity = Activity {
         application_id: None,
         assets: None,
@@ -176,17 +173,16 @@ async fn main() -> Result<()> {
         if top_gg_config.enabled {
             let bot_ctx = Arc::new(bot_context.clone());
             let webhook_auth = top_gg_config.webhook_auth.clone();
+            let webhook_addr = format!("{}:{}", config.server.host, config.server.port);
+
+            tracing::info!("[Webhook Server] Starting on {}", webhook_addr);
 
             let webhook_task = tokio::spawn(async move {
-                match api::WebhookServer::new(
-                    "127.0.0.1:3000",
-                    bot_ctx.clone(),
-                    webhook_auth.clone(),
-                )
-                .await
+                match api::WebhookServer::new(&webhook_addr, bot_ctx.clone(), webhook_auth.clone())
+                    .await
                 {
                     Ok(server) => {
-                        tracing::info!("[Webhook Server] Started successfully");
+                        tracing::info!("[Webhook Server] Listening on {}", webhook_addr);
                         if let Err(e) = server.run(bot_ctx, webhook_auth).await {
                             tracing::error!("[Webhook Server] Fatal error: {}", e);
                         }
@@ -198,7 +194,11 @@ async fn main() -> Result<()> {
             });
 
             tasks.push(webhook_task);
+        } else {
+            tracing::info!("[Webhook Server] Disabled in config");
         }
+    } else {
+        tracing::info!("[Webhook Server] Top.gg not configured");
     }
 
     for mut shard in shards {

@@ -10,7 +10,7 @@ pub struct DigRefreshButton;
 
 #[async_trait]
 impl ComponentHandler for DigRefreshButton {
-    fn custom_id_pattern(&self) -> &str {
+    fn custom_id_pattern(&self) -> &'static str {
         "dig_refresh:*"
     }
 

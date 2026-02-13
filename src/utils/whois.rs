@@ -34,7 +34,7 @@ pub async fn who(q: &str) -> Result<Embed, String> {
 }
 
 async fn lookup_rdap(query: &str) -> Option<Vec<(String, String)>> {
-    let url = format!("https://rdap.cloud/api/v1/{}", query);
+    let url = format!("https://rdap.cloud/api/v1/{query}");
     let res = reqwest::get(&url).await.ok()?;
     if !res.status().is_success() {
         return None;
@@ -47,7 +47,7 @@ async fn lookup_rdap(query: &str) -> Option<Vec<(String, String)>> {
         .and_then(|r| r.get(query))
         .and_then(|q| q.get("success"))
         .and_then(|s| if s.as_bool()? { Some(()) } else { None })
-        .and_then(|_| json.get("results")?.get(query)?.get("data"))?;
+        .and_then(|()| json.get("results")?.get(query)?.get("data"))?;
 
     let fields = extract_rdap_fields(data);
     if fields.is_empty() {
@@ -58,7 +58,7 @@ async fn lookup_rdap(query: &str) -> Option<Vec<(String, String)>> {
 }
 
 async fn lookup_whois(query: &str) -> Option<Vec<(String, String)>> {
-    let url = format!("https://whoisjs.com/api/v1/{}", query);
+    let url = format!("https://whoisjs.com/api/v1/{query}");
     let res = reqwest::get(&url).await.ok()?;
     if !res.status().is_success() {
         return None;
@@ -70,7 +70,7 @@ async fn lookup_whois(query: &str) -> Option<Vec<(String, String)>> {
         .get(query)
         .and_then(|q| q.get("success"))
         .and_then(|s| if s.as_bool()? { Some(()) } else { None })
-        .and_then(|_| json.get(query)?.get("data"))?;
+        .and_then(|()| json.get(query)?.get("data"))?;
 
     let fields = extract_whois_fields(data);
     if fields.is_empty() {
@@ -81,7 +81,7 @@ async fn lookup_whois(query: &str) -> Option<Vec<(String, String)>> {
 }
 
 async fn lookup_cfwho(query: &str) -> Option<Vec<(String, String)>> {
-    let url = format!("https://cfwho.com/api/v1/{}", query);
+    let url = format!("https://cfwho.com/api/v1/{query}");
     let res = reqwest::get(&url).await.ok()?;
     if !res.status().is_success() {
         return None;
@@ -93,7 +93,7 @@ async fn lookup_cfwho(query: &str) -> Option<Vec<(String, String)>> {
         .get(query)
         .and_then(|q| q.get("success"))
         .and_then(|s| if s.as_bool()? { Some(()) } else { None })
-        .and_then(|_| json.get(query))?;
+        .and_then(|()| json.get(query))?;
 
     let fields = extract_cfwho_fields(data);
     if fields.is_empty() {
@@ -136,7 +136,7 @@ fn build(query: &str, fields: &[(String, String)]) -> Embed {
     let mut used = HashSet::new();
     let mut ordered = Vec::new();
 
-    for key in preferred_order.iter() {
+    for key in &preferred_order {
         if let Some(value) = fields
             .iter()
             .find(|(k, _)| k == key)
@@ -154,7 +154,7 @@ fn build(query: &str, fields: &[(String, String)]) -> Embed {
         ordered.push((key.clone(), format_field_value(key, value)));
     }
 
-    let table_rows: Vec<Vec<String>> = std::iter::once(vec!["".to_string(), "".to_string()])
+    let table_rows: Vec<Vec<String>> = std::iter::once(vec![String::new(), String::new()])
         .chain(ordered.into_iter().map(|(k, v)| vec![k, v]))
         .collect();
 
@@ -165,12 +165,12 @@ fn build(query: &str, fields: &[(String, String)]) -> Embed {
         .join("\n");
 
     let title = if query.chars().all(|c| c.is_ascii_digit()) {
-        format!("AS{}", query)
+        format!("AS{query}")
     } else {
         query.to_string()
     };
 
-    embed::make("WHOIS", &format!("```\n{}\n{}\n```", title, table), None)
+    embed::make("WHOIS", &format!("```\n{title}\n{table}\n```"), None)
 }
 
 fn format_field_value(key: &str, value: &str) -> String {
@@ -244,7 +244,7 @@ fn extract_rdap_fields(json: &Value) -> Vec<(String, String)> {
     {
         let asn_list: Vec<String> = asn_arr
             .iter()
-            .filter_map(|v| v.as_u64().map(|n| format!("AS{}", n)))
+            .filter_map(|v| v.as_u64().map(|n| format!("AS{n}")))
             .collect();
         if !asn_list.is_empty() {
             out.push(("ASN".to_string(), asn_list.join(", ")));
@@ -257,10 +257,10 @@ fn extract_rdap_fields(json: &Value) -> Vec<(String, String)> {
             .filter_map(|c| {
                 let prefix = c
                     .get("v4prefix")
-                    .or(c.get("v6prefix"))
+                    .or_else(|| c.get("v6prefix"))
                     .and_then(|v| v.as_str())?;
-                let length = c.get("length").and_then(|v| v.as_u64())?;
-                Some(format!("{}/{}", prefix, length))
+                let length = c.get("length").and_then(serde_json::Value::as_u64)?;
+                Some(format!("{prefix}/{length}"))
             })
             .collect();
         if !cidr_list.is_empty() {
@@ -272,7 +272,7 @@ fn extract_rdap_fields(json: &Value) -> Vec<(String, String)> {
         let ns_list: Vec<String> = ns
             .iter()
             .filter_map(|n| n.get("ldhName").and_then(|v| v.as_str()))
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
         if !ns_list.is_empty() {
             out.push(("Nameservers".to_string(), ns_list.join(", ")));
@@ -294,7 +294,7 @@ fn find_entity_name(role: &str, json: &Value) -> Option<String> {
         if let Some(roles) = entity.get("roles").and_then(|v| v.as_array()) {
             if roles
                 .iter()
-                .any(|r| r.as_str().map(|s| s.to_lowercase()) == Some(role.to_lowercase()))
+                .any(|r| r.as_str().map(str::to_lowercase) == Some(role.to_lowercase()))
             {
                 if let Some(name) = get_vcard_field(entity, "fn") {
                     names.push(name);
@@ -335,7 +335,10 @@ fn get_vcard_field(entity: &Value, field_name: &str) -> Option<String> {
     for field in vcard_fields {
         if let Some(field_arr) = field.as_array() {
             if field_arr.first()?.as_str()? == field_name {
-                return field_arr.get(3)?.as_str().map(|s| s.to_string());
+                return field_arr
+                    .get(3)?
+                    .as_str()
+                    .map(std::string::ToString::to_string);
             }
         }
     }
@@ -378,7 +381,7 @@ fn find_abuse_email(json: &Value) -> Option<String> {
 }
 
 fn unique_comma_sep(items: &[String]) -> String {
-    let mut unique: Vec<String> = items.iter().cloned().collect();
+    let mut unique: Vec<String> = items.to_vec();
     unique.sort();
     unique.dedup();
     unique.join(", ")
@@ -387,9 +390,8 @@ fn unique_comma_sep(items: &[String]) -> String {
 fn extract_whois_fields(json: &Value) -> Vec<(String, String)> {
     let mut out = Vec::new();
 
-    let data_array = match json.as_array() {
-        Some(arr) => arr,
-        None => return out,
+    let Some(data_array) = json.as_array() else {
+        return out;
     };
 
     let find_attr = |names: &[&str]| -> Option<String> {
@@ -464,7 +466,7 @@ fn extract_cfwho_fields(json: &Value) -> Vec<(String, String)> {
     {
         let emails: Vec<String> = contacts
             .iter()
-            .filter_map(|e| e.as_str().map(|s| s.to_string()))
+            .filter_map(|e| e.as_str().map(std::string::ToString::to_string))
             .collect();
         if !emails.is_empty() {
             out.push(("Abuse".to_string(), unique_comma_sep(&emails)));

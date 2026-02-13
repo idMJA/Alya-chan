@@ -15,11 +15,11 @@ pub struct PingCommand;
 
 #[async_trait]
 impl SlashCommand for PingCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "ping"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Check bot latency and responsiveness"
     }
 

@@ -9,18 +9,13 @@ use twilight_standby::Standby;
 
 /// Global bot context yang di-share ke semua handlers
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct BotContext {
     pub http: Arc<HttpClient>,
-    #[allow(dead_code)]
     pub cache: Arc<InMemoryCache>,
     #[allow(dead_code)]
     pub standby: Arc<Standby>,
-    #[allow(dead_code)]
     pub config: Arc<Config>,
-    #[allow(dead_code)]
     pub database: &'static AlyaDatabase,
-    #[allow(dead_code)]
     pub command_manager: Arc<CommandManager>,
     pub shard_count: u32,
     pub presence_tx: broadcast::Sender<PresenceUpdate>,
@@ -34,7 +29,8 @@ pub struct PresenceUpdate {
 }
 
 impl BotContext {
-    pub fn new(
+    #[allow(clippy::too_many_arguments)]
+    pub const fn new(
         http: Arc<HttpClient>,
         cache: Arc<InMemoryCache>,
         standby: Arc<Standby>,

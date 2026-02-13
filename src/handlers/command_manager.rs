@@ -1,4 +1,4 @@
-use crate::types::{BotContext, BotResult, CommandMeta, SlashCommand, SlashCommandContext};
+use crate::types::{BotContext, BotResult, SlashCommand, SlashCommandContext};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -24,9 +24,9 @@ impl CommandManager {
             .insert(name.clone(), (command.clone(), category_string.clone()));
 
         self.commands_by_category
-            .entry(category_string.clone())
+            .entry(category_string)
             .or_default()
-            .push(name.clone());
+            .push(name);
     }
 
     pub fn get(&self, name: &str) -> Option<&Arc<dyn SlashCommand>> {
@@ -52,15 +52,7 @@ impl CommandManager {
     pub fn get_all_categories(&self) -> Vec<&str> {
         self.commands_by_category
             .keys()
-            .map(|s| s.as_str())
-            .collect()
-    }
-
-    #[allow(dead_code)]
-    pub fn get_all_metadata(&self) -> Vec<CommandMeta> {
-        self.commands
-            .values()
-            .map(|(cmd, _)| cmd.metadata())
+            .map(std::string::String::as_str)
             .collect()
     }
 
@@ -72,6 +64,7 @@ impl CommandManager {
     }
 
     #[allow(dead_code)]
+    #[allow(clippy::too_many_arguments)]
     pub async fn execute(
         &self,
         bot: BotContext,

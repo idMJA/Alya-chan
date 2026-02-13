@@ -3,9 +3,7 @@ use async_trait::async_trait;
 use twilight_model::application::interaction::Interaction;
 
 pub struct ComponentContext {
-    #[allow(dead_code)]
     pub bot: BotContext,
-    #[allow(dead_code)]
     pub interaction: Box<Interaction>,
 }
 

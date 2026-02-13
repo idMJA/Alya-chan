@@ -13,11 +13,11 @@ pub struct IqCommand;
 
 #[async_trait]
 impl SlashCommand for IqCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "iq"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Generate a random IQ score for fun"
     }
 
@@ -44,23 +44,19 @@ impl SlashCommand for IqCommand {
         let iq = 2 + (seed % 299) as u32; // 2..=300
 
         let (emoji, line) = if iq >= 80 {
-            ("🧠", format!("IQ high **{}**. You're a genius!", iq))
+            ("🧠", format!("IQ high **{iq}**. You're a genius!"))
         } else if iq <= 50 {
-            (
-                "📚",
-                format!("IQ low **{}**. Keep learning and growing!", iq),
-            )
+            ("📚", format!("IQ low **{iq}**. Keep learning and growing!"))
         } else {
-            ("🧪", format!("IQ is **{}**.", iq))
+            ("🧪", format!("IQ is **{iq}**."))
         };
 
-        let target_mention = target_user
-            .map(|id| format!("<@{}>", id))
-            .unwrap_or_else(|| "someone".to_string());
+        let target_mention =
+            target_user.map_or_else(|| "someone".to_string(), |id| format!("<@{id}>"));
 
         let embed = EmbedBuilder::new()
             .color(ctx.bot.config.color.primary)
-            .title(&format!("{} IQ Test", emoji))
+            .title(format!("{emoji} IQ Test").as_str())
             .field(EmbedFieldBuilder::new("User", target_mention))
             .field(EmbedFieldBuilder::new("Result", line))
             .build();

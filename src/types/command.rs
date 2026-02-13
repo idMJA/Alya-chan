@@ -20,7 +20,9 @@ pub struct AutocompleteContext {
     pub bot: BotContext,
     pub interaction_id: twilight_model::id::Id<twilight_model::id::marker::InteractionMarker>,
     pub application_id: twilight_model::id::Id<twilight_model::id::marker::ApplicationMarker>,
+    #[allow(dead_code)]
     pub author_id: Option<Id<UserMarker>>,
+    #[allow(dead_code)]
     pub guild_id: Option<Id<GuildMarker>>,
     pub token: String,
     pub data: Box<CommandData>,

@@ -13,7 +13,7 @@ pub struct HelpCommand {
 }
 
 impl HelpCommand {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             command_manager: None,
         }
@@ -27,11 +27,11 @@ impl HelpCommand {
 
 #[async_trait]
 impl SlashCommand for HelpCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "help"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Show all available commands organized by category"
     }
 
@@ -55,13 +55,13 @@ impl SlashCommand for HelpCommand {
             let author_mention = ctx
                 .author_id
                 .as_ref()
-                .map(|id| format!("<@{}>", id))
+                .map(|id| format!("<@{id}>"))
                 .unwrap_or_else(|| String::from("<@unknown>"));
 
             let mut main = EmbedBuilder::new()
                 .color(ctx.bot.config.color.primary)
                 .title("Alya-chan Help Center")
-                .description(format!("**Konnichiwa! {}, I'm Alya-chan**\n\n**A multifunctional Discord bot inspired by your favorite anime characters. With powerful features, Alya-chan is not only ready to accompany you to play, but also help you manage your Discord server more effectively. Equipped with various moderation, entertainment, and utility features, and more. Alya-chan is a loyal friend who is ready to help anytime!**", author_mention))
+                .description(format!("**Konnichiwa! {author_mention}, I'm Alya-chan**\n\n**A multifunctional Discord bot inspired by your favorite anime characters. With powerful features, Alya-chan is not only ready to accompany you to play, but also help you manage your Discord server more effectively. Equipped with various moderation, entertainment, and utility features, and more. Alya-chan is a loyal friend who is ready to help anytime!**", author_mention = author_mention))
                 .field(twilight_util::builder::embed::EmbedFieldBuilder::new("\u{200B}", "\u{200B}"))   
                 .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
                     "Categories",

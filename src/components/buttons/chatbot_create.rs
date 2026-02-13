@@ -17,7 +17,7 @@ pub struct ChatbotCreateButton;
 
 #[async_trait]
 impl ComponentHandler for ChatbotCreateButton {
-    fn custom_id_pattern(&self) -> &str {
+    fn custom_id_pattern(&self) -> &'static str {
         "chatbot_create:*"
     }
 
@@ -34,15 +34,14 @@ impl ComponentHandler for ChatbotCreateButton {
 
         let mut parts = custom_id.split(':');
         parts.next();
-        let guild_id = match parts.next().and_then(|id| id.parse::<u64>().ok()) {
-            Some(id) => twilight_model::id::Id::<twilight_model::id::marker::GuildMarker>::new(id),
-            None => {
-                let container = build_status_container(
-                    "Chatbot Setup",
-                    &format!("{} Invalid guild ID.", ctx.bot.config.emoji.no),
-                );
-                return update_message(ctx, interaction_id, &token, container, vec![]).await;
-            }
+        let guild_id = if let Some(id) = parts.next().and_then(|id| id.parse::<u64>().ok()) {
+            twilight_model::id::Id::<twilight_model::id::marker::GuildMarker>::new(id)
+        } else {
+            let container = build_status_container(
+                "Chatbot Setup",
+                &format!("{} Invalid guild ID.", ctx.bot.config.emoji.no),
+            );
+            return update_message(ctx, interaction_id, &token, container, vec![]).await;
         };
 
         let bot_id = match ctx.bot.cache.current_user() {
@@ -116,7 +115,7 @@ fn build_status_container(title: &str, content: &str) -> Container {
         components: vec![
             Component::TextDisplay(TextDisplay {
                 id: None,
-                content: format!("## {}\n{}", title, content),
+                content: format!("## {title}\n{content}"),
             }),
             Component::Separator(Separator {
                 id: None,

@@ -8,7 +8,7 @@ pub struct ShipCanvas {
 }
 
 impl ShipCanvas {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { font: None }
     }
 
@@ -50,13 +50,13 @@ impl ShipCanvas {
         avatar1: Option<Vec<u8>>,
         avatar2: Option<Vec<u8>>,
         percentage: u32,
-        bg_bytes: Option<Vec<u8>>,
+        bg_bytes: Option<&[u8]>,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
         let mut surface =
             surfaces::raster_n32_premul((1280, 720)).ok_or("Failed to create surface")?;
         let canvas = surface.canvas();
 
-        self.draw_bg(canvas, bg_bytes.as_deref())?;
+        self.draw_bg(canvas, bg_bytes);
 
         if let Some(data) = avatar1 {
             self.draw_avatar(canvas, &data, 619.4, 205.1, 97.2)?;
@@ -65,9 +65,9 @@ impl ShipCanvas {
             self.draw_avatar(canvas, &data, 151.0, 433.7, 97.2)?;
         }
 
-        self.draw_text(canvas, name1, 415.0, 254.3)?;
-        self.draw_text(canvas, name2, 464.7, 481.0)?;
-        self.draw_percent(canvas, percentage, 440.6, 363.5)?;
+        self.draw_text(canvas, name1, 415.0, 254.3);
+        self.draw_text(canvas, name2, 464.7, 481.0);
+        self.draw_percent(canvas, percentage, 440.6, 363.5);
 
         let img = surface.image_snapshot();
 
@@ -79,11 +79,7 @@ impl ShipCanvas {
         Ok(data.as_bytes().to_vec())
     }
 
-    fn draw_bg(
-        &self,
-        canvas: &Canvas,
-        bg_bytes: Option<&[u8]>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_bg(&self, canvas: &Canvas, bg_bytes: Option<&[u8]>) {
         if let Some(bytes) = bg_bytes {
             tracing::debug!(
                 "Attempting to decode background image: {} bytes",
@@ -97,10 +93,9 @@ impl ShipCanvas {
                     Rect::from_xywh(0.0, 0.0, 1280.0, 720.0),
                     &Paint::default(),
                 );
-                return Ok(());
-            } else {
-                tracing::warn!("Failed to decode background image, using fallback gradient");
+                return;
             }
+            tracing::warn!("Failed to decode background image, using fallback gradient");
         } else {
             tracing::info!("No background bytes provided, using gradient fallback");
         }
@@ -123,7 +118,6 @@ impl ShipCanvas {
             paint.set_shader(shader);
         }
         canvas.draw_rect(Rect::from_xywh(0.0, 0.0, 1280.0, 720.0), &paint);
-        Ok(())
     }
 
     fn draw_avatar(
@@ -139,9 +133,9 @@ impl ShipCanvas {
 
         let rect = Rect::from_xywh(x, y, size, size);
         let radius = size / 2.0;
-        let rrect = RRect::new_rect_xy(rect, radius, radius);
+        let rounded = RRect::new_rect_xy(rect, radius, radius);
 
-        canvas.clip_rrect(rrect, ClipOp::Intersect, true);
+        canvas.clip_rrect(rounded, ClipOp::Intersect, true);
 
         let mut paint = Paint::default();
         paint.set_anti_alias(true);
@@ -150,13 +144,7 @@ impl ShipCanvas {
         Ok(())
     }
 
-    fn draw_text(
-        &self,
-        canvas: &Canvas,
-        name: &str,
-        x: f32,
-        y: f32,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_text(&self, canvas: &Canvas, name: &str, x: f32, y: f32) {
         let clean: String = name
             .chars()
             .filter(|c| c.is_alphanumeric())
@@ -189,16 +177,9 @@ impl ShipCanvas {
         let cy = y + (text_height / 2.0);
 
         canvas.draw_str(&clean, (cx, cy), &final_font, &paint);
-        Ok(())
     }
 
-    fn draw_percent(
-        &self,
-        canvas: &Canvas,
-        pct: u32,
-        x: f32,
-        y: f32,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn draw_percent(&self, canvas: &Canvas, pct: u32, x: f32, y: f32) {
         let mut paint = Paint::default();
         paint.set_color(Color::WHITE);
         paint.set_anti_alias(true);
@@ -209,32 +190,33 @@ impl ShipCanvas {
             .unwrap_or_else(|| mgr.legacy_make_typeface(None, FontStyle::bold()).unwrap());
         let font = Font::from_typeface(tf, 24.0);
 
-        let text = format!("{}", pct);
+        let text = format!("{pct}");
         let (_, bounds) = font.measure_str(&text, Some(&paint));
         let text_height = bounds.height();
         let cy = y + (text_height / 2.0);
 
         canvas.draw_str(&text, (x, cy), &font, &paint);
-        Ok(())
     }
 }
 
 pub fn calc_love(id1: &str, id2: &str) -> u32 {
-    let combined = format!("{}{}", id1, id2);
+    let combined = format!("{id1}{id2}");
     let hash: i32 = combined.chars().fold(0i32, |mut a, b| {
         a = ((a << 5).wrapping_sub(a)).wrapping_add(b as i32);
-        a & a
+        a
     });
-    (hash.abs() % 101) as u32
+    u32::try_from(hash.abs() % 101).unwrap_or(0)
 }
 
 pub fn ship_name(n1: &str, n2: &str) -> String {
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     let mid1 = (n1.len() as f64 / 2.0).ceil() as usize;
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     let mid2 = (n2.len() as f64 / 2.0).floor() as usize;
     format!("{}{}", &n1[..mid1], &n2[mid2..])
 }
 
-pub fn love_msg(pct: u32) -> (&'static str, &'static str) {
+pub const fn love_msg(pct: u32) -> (&'static str, &'static str) {
     match pct {
         90..=100 => ("💖", "Absolutely perfect! You two are soulmates! The universe conspired to bring you together! 💫"),
         80..=89 => ("💖", "Perfect match! You two are meant to be together! There's undeniable chemistry here! ✨"),

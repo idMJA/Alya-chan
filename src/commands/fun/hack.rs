@@ -13,13 +13,14 @@ use uuid::Uuid;
 
 pub struct HackCommand;
 
+#[allow(clippy::too_many_lines)]
 #[async_trait]
 impl SlashCommand for HackCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "hack"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Hack the mentioned user"
     }
 
@@ -167,7 +168,7 @@ impl SlashCommand for HackCommand {
             components: vec![
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("# **{}'s** Hacked Data\n\n🔓 **Mission Complete!** Successfully infiltrated all systems.", target_name),
+                    content: format!("# **{target_name}'s** Hacked Data\n\n🔓 **Mission Complete!** Successfully infiltrated all systems."),
                 }),
                 Component::Separator(Separator {
                     id: None,
@@ -176,27 +177,27 @@ impl SlashCommand for HackCommand {
                 }),
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("**🔐 Device Password:**\n`{}`", pick(&device_passwords, seed)),
+                    content: format!("**🔐 Device Password:**\n`{}`", pick(device_passwords, seed)),
                 }),
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("**🆔 System ID:**\n`{}`", pick(&system_ids, seed / 2)),
+                    content: format!("**🆔 System ID:**\n`{}`", pick(system_ids, seed / 2)),
                 }),
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("**📶 WiFi Access:**\n**Network:** {}\n**Password:** `{}`", pick(&wifi_names, seed / 3), pick(&wifi_pw, seed / 4)),
+                    content: format!("**📶 WiFi Access:**\n**Network:** {}\n**Password:** `{}`", pick(wifi_names, seed / 3), pick(wifi_pw, seed / 4)),
                 }),
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("**📍 Location:**\n{}", pick(&locations, seed / 5)),
+                    content: format!("**📍 Location:**\n{}", pick(locations, seed / 5)),
                 }),
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("**📋 DOB:**\n{}", pick(&dobs, seed / 6)),
+                    content: format!("**📋 DOB:**\n{}", pick(dobs, seed / 6)),
                 }),
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("**💳 Credit Card:**\n`{}`", pick(&cc_numbers, seed / 7)),
+                    content: format!("**💳 Credit Card:**\n`{}`", pick(cc_numbers, seed / 7)),
                 }),
                 Component::Separator(Separator {
                     id: None,

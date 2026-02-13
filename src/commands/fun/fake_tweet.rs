@@ -14,13 +14,14 @@ use url::form_urlencoded;
 
 pub struct FakeTweetCommand;
 
+#[allow(clippy::too_many_lines)]
 #[async_trait]
 impl SlashCommand for FakeTweetCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "fake-tweet"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Generate a lightweight fake tweet"
     }
 
@@ -60,9 +61,7 @@ impl SlashCommand for FakeTweetCommand {
                         let avatar = user
                             .avatar
                             .as_ref()
-                            .map(|h| {
-                                format!("https://cdn.discordapp.com/avatars/{}/{}.jpg", uid, h)
-                            })
+                            .map(|h| format!("https://cdn.discordapp.com/avatars/{uid}/{h}.jpg"))
                             .unwrap_or_default();
                         (
                             user.global_name
@@ -94,7 +93,7 @@ impl SlashCommand for FakeTweetCommand {
             components: vec![
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("## {}'s Tweet", display_name),
+                    content: format!("## {display_name}'s Tweet"),
                 }),
                 Component::Separator(Separator {
                     id: None,
@@ -122,7 +121,7 @@ impl SlashCommand for FakeTweetCommand {
                 }),
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("Requested by {}", username),
+                    content: format!("Requested by {username}"),
                 }),
             ],
             accent_color: Some(Some(ctx.bot.config.color.primary)),

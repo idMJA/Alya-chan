@@ -23,11 +23,9 @@ impl GuildCreateHandler {
     }
 
     pub fn is_new_guild(guild_id: u64) -> bool {
-        if let Ok(seen) = Self::get_seen_guilds().read() {
-            !seen.contains(&guild_id)
-        } else {
-            true
-        }
+        Self::get_seen_guilds()
+            .read()
+            .map_or(true, |seen| !seen.contains(&guild_id))
     }
 
     pub async fn startup_complete() {
@@ -42,7 +40,7 @@ impl GuildCreateHandler {
 
 #[async_trait]
 impl EventHandler for GuildCreateHandler {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "guild_create"
     }
 

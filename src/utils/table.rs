@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 fn chunk_str(s: &str, size: usize) -> Vec<String> {
     s.chars()
         .collect::<Vec<_>>()
@@ -7,7 +8,7 @@ fn chunk_str(s: &str, size: usize) -> Vec<String> {
 }
 
 pub fn present_table(rows: &[Vec<String>]) -> String {
-    let cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
+    let cols = rows.iter().map(std::vec::Vec::len).max().unwrap_or(0);
     if cols == 0 {
         return String::new();
     }

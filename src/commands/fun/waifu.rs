@@ -12,11 +12,11 @@ pub struct WaifuCommand;
 
 #[async_trait]
 impl SlashCommand for WaifuCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "waifu"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Get a random waifu image"
     }
 
@@ -25,18 +25,36 @@ impl SlashCommand for WaifuCommand {
         let client = reqwest::Client::new();
 
         let image_url = match client.get(api_url).send().await {
-            Ok(resp) => match resp.json::<serde_json::Value>().await {
-                Ok(json) => json
-                    .get("url")
+            Ok(resp) => resp.json::<serde_json::Value>().await.map_or(None, |json| {
+                json.get("url")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
-                Err(_) => None,
-            },
+                    .map(std::string::ToString::to_string)
+            }),
             Err(_) => None,
         };
 
-        let container = if let Some(url) = image_url {
-            Container {
+        let container = image_url.map_or_else(
+            || Container {
+                id: None,
+                components: vec![
+                    Component::TextDisplay(TextDisplay {
+                        id: None,
+                        content: "❌ **Error**\n\nOops! Something went wrong while fetching your waifu. Please try again later.".to_string(),
+                    }),
+                    Component::Separator(Separator {
+                        id: None,
+                        divider: None,
+                        spacing: Some(SeparatorSpacingSize::Large),
+                    }),
+                    Component::TextDisplay(TextDisplay {
+                        id: None,
+                        content: "Source: waifu.pics".to_string(),
+                    }),
+                ],
+                accent_color: Some(Some(ctx.bot.config.color.primary)),
+                spoiler: None,
+            },
+            |url| Container {
                 id: None,
                 components: vec![
                     Component::TextDisplay(TextDisplay {
@@ -47,7 +65,7 @@ impl SlashCommand for WaifuCommand {
                         id: None,
                         items: vec![MediaGalleryItem {
                             media: UnfurledMediaItem {
-                                url: url.clone(),
+                                url,
                                 content_type: None,
                                 height: None,
                                 width: None,
@@ -70,28 +88,7 @@ impl SlashCommand for WaifuCommand {
                 accent_color: Some(Some(ctx.bot.config.color.primary)),
                 spoiler: None,
             }
-        } else {
-            Container {
-                id: None,
-                components: vec![
-                    Component::TextDisplay(TextDisplay {
-                        id: None,
-                        content: "❌ **Error**\n\nOops! Something went wrong while fetching your waifu. Please try again later.".to_string(),
-                    }),
-                    Component::Separator(Separator {
-                        id: None,
-                        divider: None,
-                        spacing: Some(SeparatorSpacingSize::Large),
-                    }),
-                    Component::TextDisplay(TextDisplay {
-                        id: None,
-                        content: "Source: waifu.pics".to_string(),
-                    }),
-                ],
-                accent_color: Some(Some(ctx.bot.config.color.primary)),
-                spoiler: None,
-            }
-        };
+        );
 
         ctx.bot
             .http

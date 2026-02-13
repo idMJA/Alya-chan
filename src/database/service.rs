@@ -5,27 +5,31 @@ use std::sync::Arc;
 use tokio::sync::{OnceCell, RwLock};
 use uuid::Uuid;
 
+#[allow(dead_code)]
 const DEFAULT_LOCALE: &str = "en-US";
+#[allow(dead_code)]
 const DEFAULT_PREFIX: &str = "!";
 const VOTE_PREMIUM_DURATION_HOURS: i64 = 12;
 
 pub struct ISetup {
+    #[allow(dead_code)]
     pub id: String,
+    #[allow(dead_code)]
     pub guild_id: String,
     pub channel_id: String,
+    #[allow(dead_code)]
     pub created_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 pub struct PremiumStatus {
     pub vote_type: String,
     pub time_remaining: u64,
 }
 
-pub struct VoteStats {
-    pub total: i64,
-    pub active: i64,
-}
+pub struct VoteStats;
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct PremiumStats {
     pub active: bool,
@@ -35,15 +39,21 @@ pub struct PremiumStats {
 
 pub struct AlyaDatabase {
     db: libsql::Database,
+    #[allow(dead_code)]
     cache: Arc<RwLock<HashMap<String, CachedGuild>>>,
+    #[allow(dead_code)]
     db_path: String,
+    #[allow(dead_code)]
     remote_url: Option<String>,
+    #[allow(dead_code)]
     remote_token: Option<String>,
 }
 
 #[derive(Clone, Default)]
 struct CachedGuild {
+    #[allow(dead_code)]
     locale: Option<String>,
+    #[allow(dead_code)]
     prefix: Option<String>,
 }
 
@@ -54,7 +64,7 @@ impl AlyaDatabase {
         local_path: &str,
         remote_url: Option<&str>,
         remote_token: Option<&str>,
-    ) -> anyhow::Result<&'static AlyaDatabase> {
+    ) -> anyhow::Result<&'static Self> {
         DB.get_or_try_init(|| async {
             let db = if let Some(url) = remote_url {
                 let token = remote_token.unwrap_or("");
@@ -82,7 +92,7 @@ impl AlyaDatabase {
         .await
     }
 
-    pub fn get() -> anyhow::Result<&'static AlyaDatabase> {
+    pub fn get() -> anyhow::Result<&'static Self> {
         DB.get()
             .ok_or_else(|| anyhow::anyhow!("AlyaDatabase is not initialized"))
     }
@@ -95,9 +105,7 @@ impl AlyaDatabase {
     }
 
     async fn ensure_schema(&self) -> anyhow::Result<()> {
-        let conn = self.db.connect()?;
-
-        const GUILD_SCHEMA: &str = r#"
+        const GUILD_SCHEMA: &str = r"
             CREATE TABLE IF NOT EXISTS guild (
                 id TEXT PRIMARY KEY,
                 locale TEXT,
@@ -109,9 +117,9 @@ impl AlyaDatabase {
                 created_at TEXT DEFAULT (CURRENT_TIMESTAMP),
                 updated_at TEXT DEFAULT (CURRENT_TIMESTAMP)
             );
-        "#;
+        ";
 
-        const USER_VOTE_SCHEMA: &str = r#"
+        const USER_VOTE_SCHEMA: &str = r"
             CREATE TABLE IF NOT EXISTS user_vote (
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
@@ -119,8 +127,9 @@ impl AlyaDatabase {
                 expires_at TEXT NOT NULL,
                 vote_type TEXT NOT NULL DEFAULT 'vote'
             );
-        "#;
+        ";
 
+        let conn = self.db.connect()?;
         conn.execute_batch(GUILD_SCHEMA).await?;
         conn.execute_batch(USER_VOTE_SCHEMA).await?;
 
@@ -131,14 +140,16 @@ impl AlyaDatabase {
         Utc::now().to_rfc3339()
     }
 
+    #[allow(dead_code)]
     pub async fn get_locale(&self, guild_id: &str) -> anyhow::Result<String> {
-        if let Some(locale) = self
+        let locale = self
             .cache
             .read()
             .await
             .get(guild_id)
-            .and_then(|c| c.locale.clone())
-        {
+            .and_then(|c| c.locale.clone());
+
+        if let Some(locale) = locale {
             return Ok(locale);
         }
 
@@ -166,14 +177,16 @@ impl AlyaDatabase {
         Ok(DEFAULT_LOCALE.to_string())
     }
 
+    #[allow(dead_code)]
     pub async fn get_prefix(&self, guild_id: &str) -> anyhow::Result<String> {
-        if let Some(prefix) = self
+        let prefix = self
             .cache
             .read()
             .await
             .get(guild_id)
-            .and_then(|c| c.prefix.clone())
-        {
+            .and_then(|c| c.prefix.clone());
+
+        if let Some(prefix) = prefix {
             return Ok(prefix);
         }
 
@@ -201,6 +214,7 @@ impl AlyaDatabase {
         Ok(DEFAULT_PREFIX.to_string())
     }
 
+    #[allow(dead_code)]
     pub async fn set_locale(&self, guild_id: &str, locale: &str) -> anyhow::Result<()> {
         let sql = "INSERT INTO guild (id, locale, created_at, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET locale = excluded.locale, updated_at = CURRENT_TIMESTAMP";
@@ -218,6 +232,7 @@ impl AlyaDatabase {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn set_prefix(&self, guild_id: &str, prefix: &str) -> anyhow::Result<()> {
         let sql = "INSERT INTO guild (id, prefix, created_at, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET prefix = excluded.prefix, updated_at = CURRENT_TIMESTAMP";
@@ -235,6 +250,7 @@ impl AlyaDatabase {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn delete_prefix(&self, guild_id: &str) -> anyhow::Result<()> {
         let sql = "INSERT INTO guild (id, prefix, created_at, updated_at) VALUES (?1, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET prefix = NULL, updated_at = CURRENT_TIMESTAMP";
@@ -266,8 +282,7 @@ impl AlyaDatabase {
             if let Some(channel_id) = channel_id {
                 let created_at = created_at
                     .and_then(|c| DateTime::parse_from_rfc3339(&c).ok())
-                    .map(|d| d.with_timezone(&Utc))
-                    .unwrap_or_else(Utc::now);
+                    .map_or_else(Utc::now, |d| d.with_timezone(&Utc));
 
                 return Ok(Some(ISetup {
                     id: id.clone(),
@@ -304,6 +319,7 @@ impl AlyaDatabase {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn get_global_chat_channel(&self, guild_id: &str) -> anyhow::Result<Option<String>> {
         let conn = self.db.connect()?;
         let mut rows = conn
@@ -350,6 +366,7 @@ impl AlyaDatabase {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn get_all_global_chat(
         &self,
     ) -> anyhow::Result<Vec<(String, String, Option<String>, Option<String>)>> {
@@ -373,6 +390,7 @@ impl AlyaDatabase {
         Ok(result)
     }
 
+    #[allow(dead_code)]
     pub async fn get_premium_status(&self, user_id: &str) -> anyhow::Result<Option<PremiumStatus>> {
         let now_iso = Self::now_iso();
 
@@ -382,7 +400,10 @@ impl AlyaDatabase {
             let expires = DateTime::parse_from_rfc3339(&v.0)?.with_timezone(&Utc);
             return Ok(Some(PremiumStatus {
                 vote_type: "regular".to_string(),
-                time_remaining: expires.timestamp().saturating_sub(Utc::now().timestamp()) as u64,
+                time_remaining: expires
+                    .timestamp()
+                    .saturating_sub(Utc::now().timestamp())
+                    .cast_unsigned(),
             }));
         }
 
@@ -392,7 +413,10 @@ impl AlyaDatabase {
             let expires = DateTime::parse_from_rfc3339(&v.0)?.with_timezone(&Utc);
             return Ok(Some(PremiumStatus {
                 vote_type: "vote".to_string(),
-                time_remaining: expires.timestamp().saturating_sub(Utc::now().timestamp()) as u64,
+                time_remaining: expires
+                    .timestamp()
+                    .saturating_sub(Utc::now().timestamp())
+                    .cast_unsigned(),
             }));
         }
 
@@ -404,15 +428,17 @@ impl AlyaDatabase {
         self.insert_vote(user_id, "vote", expires_at).await
     }
 
+    #[allow(dead_code)]
     pub async fn add_regular_premium(
         &self,
         user_id: &str,
         duration_secs: u64,
     ) -> anyhow::Result<()> {
-        let expires_at = Utc::now() + Duration::seconds(duration_secs as i64);
+        let expires_at = Utc::now() + Duration::seconds(duration_secs.cast_signed());
         self.insert_vote(user_id, "regular", expires_at).await
     }
 
+    #[allow(dead_code)]
     pub async fn add_premium(
         &self,
         user_id: &str,
@@ -422,7 +448,7 @@ impl AlyaDatabase {
         let expires_at = if premium_type == "regular" {
             let secs = duration_secs
                 .ok_or_else(|| anyhow::anyhow!("duration_secs required for regular premium"))?;
-            Utc::now() + Duration::seconds(secs as i64)
+            Utc::now() + Duration::seconds(secs.cast_signed())
         } else {
             Utc::now() + Duration::hours(VOTE_PREMIUM_DURATION_HOURS)
         };
@@ -430,6 +456,7 @@ impl AlyaDatabase {
         self.insert_vote(user_id, premium_type, expires_at).await
     }
 
+    #[allow(dead_code)]
     pub async fn has_active_premium(&self, user_id: &str) -> anyhow::Result<bool> {
         let now_iso = Self::now_iso();
         let conn = self.db.connect()?;
@@ -443,6 +470,7 @@ impl AlyaDatabase {
         Ok(rows.next().await?.is_some())
     }
 
+    #[allow(dead_code)]
     pub async fn get_premium_time_remaining(&self, user_id: &str) -> anyhow::Result<Option<u64>> {
         let now_iso = Self::now_iso();
         let conn = self.db.connect()?;
@@ -457,13 +485,17 @@ impl AlyaDatabase {
             let expires_at: String = row.get(0)?;
             let expires = DateTime::parse_from_rfc3339(&expires_at)?.with_timezone(&Utc);
             return Ok(Some(
-                expires.timestamp().saturating_sub(Utc::now().timestamp()) as u64,
+                expires
+                    .timestamp()
+                    .saturating_sub(Utc::now().timestamp())
+                    .cast_unsigned(),
             ));
         }
 
         Ok(None)
     }
 
+    #[allow(dead_code)]
     pub async fn clear_vote_data(&self, user_id: &str) -> anyhow::Result<()> {
         let conn = self.db.connect()?;
         conn.execute("DELETE FROM user_vote WHERE user_id = ?1", params![user_id])
@@ -472,6 +504,7 @@ impl AlyaDatabase {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn clear_premium_data(&self, user_id: &str) -> anyhow::Result<()> {
         let conn = self.db.connect()?;
         conn.execute(
@@ -483,6 +516,7 @@ impl AlyaDatabase {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn cleanup_expired_votes(&self) -> anyhow::Result<u64> {
         let now_iso = Self::now_iso();
         let conn = self.db.connect()?;
@@ -496,6 +530,7 @@ impl AlyaDatabase {
         Ok(result)
     }
 
+    #[allow(dead_code)]
     pub async fn get_vote_stats(&self, user_id: Option<&str>) -> anyhow::Result<VoteStats> {
         let conn = self.db.connect()?;
 
@@ -545,9 +580,10 @@ impl AlyaDatabase {
                 .unwrap_or(0)
         };
 
-        Ok(VoteStats { total, active })
+        Ok(VoteStats)
     }
 
+    #[allow(dead_code)]
     pub async fn get_premium_stats(&self, user_id: Option<&str>) -> anyhow::Result<PremiumStats> {
         let now_iso = Self::now_iso();
 
@@ -632,6 +668,7 @@ impl AlyaDatabase {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn fetch_latest_vote(
         &self,
         user_id: &str,

@@ -18,9 +18,10 @@ use twilight_model::http::interaction::{
 pub struct GlobalChatCreateButton;
 
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl ComponentHandler for GlobalChatCreateButton {
-    fn custom_id_pattern(&self) -> &str {
-        "globalchat_create_*"
+    fn custom_id_pattern(&self) -> &'static str {
+        "globalchat_create:*"
     }
 
     async fn handle(&self, ctx: &ComponentContext) -> BotResult<()> {
@@ -108,13 +109,13 @@ impl ComponentHandler for GlobalChatCreateButton {
                 Ok(ch) => ch,
                 Err(e) => {
                     return self
-                        .respond_error_followup(ctx, &format!("Failed to create channel: {}", e))
+                        .respond_error_followup(ctx, &format!("Failed to create channel: {e}"))
                         .await;
                 }
             },
             Err(e) => {
                 return self
-                    .respond_error_followup(ctx, &format!("Failed to create channel: {}", e))
+                    .respond_error_followup(ctx, &format!("Failed to create channel: {e}"))
                     .await;
             }
         };
@@ -162,7 +163,7 @@ impl ComponentHandler for GlobalChatCreateButton {
             .await
         {
             return self
-                .respond_error_followup(ctx, &format!("Failed to send welcome message: {}", e))
+                .respond_error_followup(ctx, &format!("Failed to send welcome message: {e}"))
                 .await;
         }
 
@@ -177,13 +178,13 @@ impl ComponentHandler for GlobalChatCreateButton {
                 Ok(wh) => wh,
                 Err(e) => {
                     return self
-                        .respond_error_followup(ctx, &format!("Failed to create webhook: {}", e))
+                        .respond_error_followup(ctx, &format!("Failed to create webhook: {e}"))
                         .await;
                 }
             },
             Err(e) => {
                 return self
-                    .respond_error_followup(ctx, &format!("Failed to create webhook: {}", e))
+                    .respond_error_followup(ctx, &format!("Failed to create webhook: {e}"))
                     .await;
             }
         };
@@ -192,7 +193,7 @@ impl ComponentHandler for GlobalChatCreateButton {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
         if let Some(key) = &gc_config.api_key {
-            headers.insert(AUTHORIZATION, format!("Bearer {}", key).parse().unwrap());
+            headers.insert(AUTHORIZATION, format!("Bearer {key}").parse().unwrap());
         }
 
         // Register with API
@@ -214,7 +215,7 @@ impl ComponentHandler for GlobalChatCreateButton {
             Ok(resp) => resp,
             Err(e) => {
                 return self
-                    .respond_error_followup(ctx, &format!("Failed to register with API: {}", e))
+                    .respond_error_followup(ctx, &format!("Failed to register with API: {e}"))
                     .await;
             }
         };
@@ -230,7 +231,7 @@ impl ComponentHandler for GlobalChatCreateButton {
             Ok(db) => db,
             Err(e) => {
                 return self
-                    .respond_error_followup(ctx, &format!("Database not ready: {}", e))
+                    .respond_error_followup(ctx, &format!("Database not ready: {e}"))
                     .await;
             }
         };
@@ -245,7 +246,7 @@ impl ComponentHandler for GlobalChatCreateButton {
             .await
         {
             return self
-                .respond_error_followup(ctx, &format!("Failed to save global chat setup: {}", e))
+                .respond_error_followup(ctx, &format!("Failed to save global chat setup: {e}"))
                 .await;
         }
 
@@ -261,7 +262,7 @@ impl ComponentHandler for GlobalChatCreateButton {
             components: vec![
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("## Global Chat Ready\n{}", success_message),
+                    content: format!("## Global Chat Ready\n{success_message}"),
                 }),
                 Component::Separator(Separator {
                     id: None,

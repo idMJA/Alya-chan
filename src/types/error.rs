@@ -4,29 +4,15 @@ use std::fmt;
 pub enum BotError {
     Twilight(twilight_http::Error),
     Gateway(twilight_gateway::error::ReceiveMessageError),
-    Database(String),
-    Config(String),
-    InvalidInput(String),
-    NotFound(String),
     Other(String),
-}
-
-impl BotError {
-    pub fn custom(msg: impl Into<String>) -> Self {
-        Self::Other(msg.into())
-    }
 }
 
 impl fmt::Display for BotError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Twilight(e) => write!(f, "Twilight error: {}", e),
-            Self::Gateway(e) => write!(f, "Gateway error: {}", e),
-            Self::Database(e) => write!(f, "Database error: {}", e),
-            Self::Config(e) => write!(f, "Config error: {}", e),
-            Self::InvalidInput(e) => write!(f, "Invalid input: {}", e),
-            Self::NotFound(e) => write!(f, "Not found: {}", e),
-            Self::Other(e) => write!(f, "{}", e),
+            Self::Twilight(e) => write!(f, "Twilight error: {e}"),
+            Self::Gateway(e) => write!(f, "Gateway error: {e}"),
+            Self::Other(e) => write!(f, "{e}"),
         }
     }
 }
@@ -48,7 +34,7 @@ impl From<twilight_gateway::error::ReceiveMessageError> for BotError {
 // Tambahkan From implementations yang kurang
 impl From<twilight_http::response::DeserializeBodyError> for BotError {
     fn from(e: twilight_http::response::DeserializeBodyError) -> Self {
-        Self::Other(format!("Deserialization error: {}", e))
+        Self::Other(format!("Deserialization error: {e}"))
     }
 }
 

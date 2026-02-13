@@ -14,14 +14,14 @@ pub struct PaginatorButton {
 }
 
 impl PaginatorButton {
-    pub fn new(cmd_mgr: Arc<CommandManager>) -> Self {
+    pub const fn new(cmd_mgr: Arc<CommandManager>) -> Self {
         Self { cmd_mgr }
     }
 }
 
 #[async_trait]
 impl ComponentHandler for PaginatorButton {
-    fn custom_id_pattern(&self) -> &str {
+    fn custom_id_pattern(&self) -> &'static str {
         "pagination-page"
     }
 

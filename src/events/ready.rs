@@ -56,9 +56,9 @@ impl ReadyHandler {
             let user_count = cache.stats().users();
 
             let activity_name = match rotation % 3 {
-                0 => format!("with {} users", user_count),
-                1 => format!("in {} guilds", guild_count),
-                _ => format!("v{}", BOT_VERSION),
+                0 => format!("with {user_count} users"),
+                1 => format!("in {guild_count} guilds"),
+                _ => format!("v{BOT_VERSION}"),
             };
 
             let update = PresenceUpdate {
@@ -69,7 +69,7 @@ impl ReadyHandler {
             if let Err(e) = presence_tx.send(update) {
                 tracing::error!("Failed to send presence update: {}", e);
             } else {
-                tracing::info!("📊 Presence: {}", activity_name);
+                tracing::debug!("Presence: {}", activity_name);
             }
 
             rotation += 1;
@@ -79,21 +79,22 @@ impl ReadyHandler {
 
 #[async_trait]
 impl EventHandler for ReadyHandler {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "ready"
     }
 
     async fn handle(&self, ctx: &EventContext) -> BotResult<()> {
         if let Event::Ready(ready) = &ctx.event {
-            let shard_info = if let Some(shard_tuple) = ready.shard {
-                format!(
-                    "[Shard {}/{}]",
-                    shard_tuple.number() + 1,
-                    ctx.bot.shard_count
-                )
-            } else {
-                "[Shard 1/1]".to_string()
-            };
+            let shard_info = ready.shard.map_or_else(
+                || "[Shard 1/1]".to_string(),
+                |shard_tuple| {
+                    format!(
+                        "[Shard {}/{}]",
+                        shard_tuple.number() + 1,
+                        ctx.bot.shard_count
+                    )
+                },
+            );
 
             tracing::info!(
                 "{} Bot is ready! Logged in as {}#{} [v{}]",
@@ -110,13 +111,13 @@ impl EventHandler for ReadyHandler {
                 ctx.bot.shard_count
             );
 
-            let current_shard = ready.shard.map(|s| s.number()).unwrap_or(0);
+            let current_shard = ready.shard.map_or(0, twilight_gateway::ShardId::number);
             if current_shard == 0 {
                 // Register all slash commands to Discord
                 self.register_commands(ctx, ready.application.id).await?;
 
                 // Start rotating presence task
-                let handler = ReadyHandler;
+                let handler = Self;
                 let cache = ctx.bot.cache.clone();
                 let presence_tx = ctx.bot.presence_tx.clone();
                 tokio::spawn(async move {
@@ -127,7 +128,7 @@ impl EventHandler for ReadyHandler {
 
                 if let Some(top_gg_config) = &ctx.bot.config.top_gg {
                     if top_gg_config.enabled {
-                        let poster = TopGgPoster::new(top_gg_config.token.clone())?;
+                        let poster = TopGgPoster::new(top_gg_config.token.clone());
 
                         let cache = ctx.bot.cache.clone();
                         let shard_count = ctx.bot.shard_count;
