@@ -546,7 +546,7 @@ impl AlyaDatabase {
             )
         };
 
-        let total = if let Some(uid) = user_id {
+        let _total = if let Some(uid) = user_id {
             let mut rows = conn.query(total_sql, params![uid]).await?;
             rows.next()
                 .await?
@@ -562,7 +562,7 @@ impl AlyaDatabase {
                 .unwrap_or(0)
         };
 
-        let active = if let Some(uid) = user_id {
+        let _active = if let Some(uid) = user_id {
             let mut rows = conn
                 .query(active_sql, params![uid, Self::now_iso()])
                 .await?;

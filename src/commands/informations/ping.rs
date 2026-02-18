@@ -24,10 +24,13 @@ impl SlashCommand for PingCommand {
     }
 
     async fn execute(&self, ctx: &SlashCommandContext) -> BotResult<()> {
-        let now_ms = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now_ms = u64::try_from(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis(),
+        )
+        .unwrap_or(0);
         let interaction_created_ms = (ctx.interaction_id.get() >> 22) + DISCORD_EPOCH_MS;
         let client_ping = now_ms.saturating_sub(interaction_created_ms);
 
@@ -60,7 +63,7 @@ impl SlashCommand for PingCommand {
                 }),
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("Status: **{}**", ping_status),
+                    content: format!("Status: **{ping_status}**"),
                 }),
                 Component::Separator(Separator {
                     id: None,

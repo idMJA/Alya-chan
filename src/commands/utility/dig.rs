@@ -14,11 +14,11 @@ pub struct DigCommand;
 
 #[async_trait]
 impl SlashCommand for DigCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "dig"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Perform a DNS over Discord lookup"
     }
 
@@ -66,7 +66,7 @@ impl SlashCommand for DigCommand {
                 }
                 "provider" => {
                     if let CommandOptionValue::String(s) = &opt.value {
-                        provider = s.clone();
+                        provider.clone_from(s);
                     }
                 }
                 _ => {}

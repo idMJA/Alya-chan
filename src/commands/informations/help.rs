@@ -55,13 +55,12 @@ impl SlashCommand for HelpCommand {
             let author_mention = ctx
                 .author_id
                 .as_ref()
-                .map(|id| format!("<@{id}>"))
-                .unwrap_or_else(|| String::from("<@unknown>"));
+                .map_or_else(|| String::from("<@unknown>"), |id| format!("<@{id}>"));
 
             let mut main = EmbedBuilder::new()
                 .color(ctx.bot.config.color.primary)
                 .title("Alya-chan Help Center")
-                .description(format!("**Konnichiwa! {author_mention}, I'm Alya-chan**\n\n**A multifunctional Discord bot inspired by your favorite anime characters. With powerful features, Alya-chan is not only ready to accompany you to play, but also help you manage your Discord server more effectively. Equipped with various moderation, entertainment, and utility features, and more. Alya-chan is a loyal friend who is ready to help anytime!**", author_mention = author_mention))
+                .description(format!("**Konnichiwa! {author_mention}, I'm Alya-chan**\n\n**A multifunctional Discord bot inspired by your favorite anime characters. With powerful features, Alya-chan is not only ready to accompany you to play, but also help you manage your Discord server more effectively. Equipped with various moderation, entertainment, and utility features, and more. Alya-chan is a loyal friend who is ready to help anytime!**"))
                 .field(twilight_util::builder::embed::EmbedFieldBuilder::new("\u{200B}", "\u{200B}"))   
                 .field(twilight_util::builder::embed::EmbedFieldBuilder::new(
                     "Categories",
@@ -139,10 +138,9 @@ impl SlashCommand for HelpCommand {
 
 fn capitalize_first(s: &str) -> String {
     let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-    }
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().collect::<String>() + chars.as_str()
+    })
 }
 
 impl Default for HelpCommand {

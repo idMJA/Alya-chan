@@ -16,7 +16,7 @@ impl GlobalChatCommand {
     fn build_action_row(guild_id: u64, registered: bool, expired: bool) -> Component {
         let (custom_id, label, style) = if registered {
             (
-                format!("setup_del_globalchat_confirm:{}", guild_id),
+                format!("setup_del_globalchat_confirm:{guild_id}"),
                 "Delete Global Chat".to_string(),
                 if expired {
                     ButtonStyle::Secondary
@@ -26,7 +26,7 @@ impl GlobalChatCommand {
             )
         } else {
             (
-                format!("globalchat_create:{}", guild_id),
+                format!("globalchat_create:{guild_id}"),
                 "Create Global Chat".to_string(),
                 if expired {
                     ButtonStyle::Secondary
@@ -63,26 +63,20 @@ impl GlobalChatCommand {
             (emoji.no.as_str(), "Not Registered", emoji.warn.as_str())
         };
 
-        let mut details = format!("{} Status: `{}`", status_emoji, status_text);
+        let mut details = format!("{status_emoji} Status: `{status_text}`");
 
         if let Some(channel_id) = channel_id {
-            details.push_str(&format!(
-                "\n{} **Channel**: <#{}>",
-                emoji.folder, channel_id
-            ));
-            details.push_str(&format!(
-                "\n{} **Description**: This server is connected to the global chat network. Messages sent in this channel will be broadcasted to all connected servers.",
-                emoji.info
-            ));
+            use std::fmt::Write;
+            let _ = write!(details, "\n{} **Channel**: <#{}>", emoji.folder, channel_id);
+            let _ = write!(details, "\n{} **Description**: This server is connected to the global chat network. Messages sent in this channel will be broadcasted to all connected servers.", emoji.info);
         } else {
-            details.push_str(&format!(
-                "\n{} **What is Global Chat?**: Connect your server to a network of other servers. Share messages across communities and make new friends!",
-                emoji.info
-            ));
-            details.push_str(&format!(
+            use std::fmt::Write;
+            let _ = write!(details, "\n{} **What is Global Chat?**: Connect your server to a network of other servers. Share messages across communities and make new friends!", emoji.info);
+            let _ = write!(
+                details,
                 "\n{} **Next Step**: Click the button below to set up global chat for your server.",
                 emoji.arrow_right
-            ));
+            );
         }
 
         Container {
@@ -90,7 +84,7 @@ impl GlobalChatCommand {
             components: vec![
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("## {} Global Chat", header_emoji),
+                    content: format!("## {header_emoji} Global Chat"),
                 }),
                 Component::Separator(Separator {
                     id: None,
@@ -131,11 +125,11 @@ impl GlobalChatCommand {
 
 #[async_trait]
 impl SlashCommand for GlobalChatCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "globalchat"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Setup global chat channel for cross-server interaction"
     }
 
@@ -149,13 +143,10 @@ impl SlashCommand for GlobalChatCommand {
             }
         };
 
-        let guild_id = match ctx.guild_id {
-            Some(id) => id,
-            None => {
-                return self
-                    .respond_error(ctx, "This command can only be used in a server.")
-                    .await;
-            }
+        let Some(guild_id) = ctx.guild_id else {
+            return self
+                .respond_error(ctx, "This command can only be used in a server.")
+                .await;
         };
 
         let mut headers = reqwest::header::HeaderMap::new();
@@ -166,7 +157,7 @@ impl SlashCommand for GlobalChatCommand {
         if let Some(key) = &gc_config.api_key {
             headers.insert(
                 reqwest::header::AUTHORIZATION,
-                format!("Bearer {}", key).parse().unwrap(),
+                format!("Bearer {key}").parse().unwrap(),
             );
         }
 
@@ -193,8 +184,7 @@ impl SlashCommand for GlobalChatCommand {
                     .find(|g| {
                         g.get("id")
                             .and_then(|id| id.as_str())
-                            .map(|id| id == guild_id.to_string())
-                            .unwrap_or(false)
+                            .is_some_and(|id| id == guild_id.to_string())
                     })
                     .and_then(|g| {
                         g.get("globalChannelId")

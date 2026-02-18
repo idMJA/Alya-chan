@@ -14,11 +14,11 @@ pub struct WhoisCommand;
 
 #[async_trait]
 impl SlashCommand for WhoisCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "whois"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Perform a WHOIS lookup for a domain, IP or ASN"
     }
 
@@ -116,9 +116,9 @@ impl SlashCommand for WhoisCommand {
                 let digits = trimmed.trim_start_matches("as").trim_start_matches("AS");
                 if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
                     vec![CommandOptionChoice {
-                        name: format!("AS{}", digits),
+                        name: format!("AS{digits}"),
                         name_localizations: None,
-                        value: CommandOptionChoiceValue::String(format!("AS{}", digits)),
+                        value: CommandOptionChoiceValue::String(format!("AS{digits}")),
                     }]
                 } else {
                     vec![CommandOptionChoice {

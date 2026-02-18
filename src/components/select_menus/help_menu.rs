@@ -19,21 +19,21 @@ pub struct HelpMenuSelect {
 
 fn capitalize_first(s: &str) -> String {
     let mut chars = s.chars();
-    match chars.next() {
-        None => String::new(),
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-    }
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().collect::<String>() + chars.as_str()
+    })
 }
 
 impl HelpMenuSelect {
-    pub fn new(cmd_mgr: Arc<CommandManager>) -> Self {
+    pub const fn new(cmd_mgr: Arc<CommandManager>) -> Self {
         Self { cmd_mgr }
     }
 }
 
+#[allow(clippy::too_many_lines)]
 #[async_trait]
 impl ComponentHandler for HelpMenuSelect {
-    fn custom_id_pattern(&self) -> &str {
+    fn custom_id_pattern(&self) -> &'static str {
         "guild-helpMenu"
     }
 
@@ -92,6 +92,7 @@ impl ComponentHandler for HelpMenuSelect {
                         };
 
                         // Try to parse string into EmojiReactionType
+                        #[allow(clippy::items_after_statements)]
                         fn parse_emoji(s: &str) -> Option<EmojiReactionType> {
                             let s = s.trim();
                             if s.starts_with('<') && s.ends_with('>') {

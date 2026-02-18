@@ -30,26 +30,20 @@ impl ChatbotCommand {
             (emoji.no.as_str(), "Not Configured")
         };
 
-        let mut details = format!("{} Status: `{}`", status_emoji, status_text);
+        let mut details = format!("{status_emoji} Status: `{status_text}`");
 
         if let Some(channel_id) = channel_id {
-            details.push_str(&format!(
-                "\n{} **Channel**: <#{}>",
-                emoji.folder, channel_id
-            ));
-            details.push_str(&format!(
-                "\n{} **Description**: This channel is configured to receive AI chatbot responses when mentioned.",
-                emoji.info
-            ));
+            use std::fmt::Write;
+            let _ = write!(details, "\n{} **Channel**: <#{}>", emoji.folder, channel_id);
+            let _ = write!(details, "\n{} **Description**: This channel is configured to receive AI chatbot responses when mentioned.", emoji.info);
         } else {
-            details.push_str(&format!(
-                "\n{} **What is Chatbot?**: Let Alya respond to mentions and questions in a dedicated channel.",
-                emoji.info
-            ));
-            details.push_str(&format!(
+            use std::fmt::Write;
+            let _ = write!(details, "\n{} **What is Chatbot?**: Let Alya respond to mentions and questions in a dedicated channel.", emoji.info);
+            let _ = write!(
+                details,
                 "\n{} **Next Step**: Click the button below to set up chatbot for your server.",
                 emoji.arrow_right
-            ));
+            );
         }
 
         Container {
@@ -123,7 +117,7 @@ impl ChatbotCommand {
     fn build_action_row(guild_id: u64, configured: bool, expired: bool) -> Component {
         let (custom_id, label, style) = if configured {
             (
-                format!("setup_del_chatbot_confirm:{}", guild_id),
+                format!("setup_del_chatbot_confirm:{guild_id}"),
                 "Delete Chatbot Setup".to_string(),
                 if expired {
                     ButtonStyle::Secondary
@@ -133,7 +127,7 @@ impl ChatbotCommand {
             )
         } else {
             (
-                format!("chatbot_create:{}", guild_id),
+                format!("chatbot_create:{guild_id}"),
                 "Create Chatbot".to_string(),
                 if expired {
                     ButtonStyle::Secondary
@@ -160,23 +154,21 @@ impl ChatbotCommand {
 }
 
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl SlashCommand for ChatbotCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "chatbot"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Setup chatbot channel"
     }
 
     async fn execute(&self, ctx: &SlashCommandContext) -> BotResult<()> {
-        let guild_id = match ctx.guild_id {
-            Some(id) => id,
-            None => {
-                return self
-                    .respond_error(ctx, "This command can only be used in a server.")
-                    .await;
-            }
+        let Some(guild_id) = ctx.guild_id else {
+            return self
+                .respond_error(ctx, "This command can only be used in a server.")
+                .await;
         };
 
         let channel_id_opt = ctx.data.options.iter().find_map(|opt| {
@@ -196,7 +188,7 @@ impl SlashCommand for ChatbotCommand {
             Ok(db) => db,
             Err(e) => {
                 return self
-                    .respond_error(ctx, &format!("Database not ready: {}", e))
+                    .respond_error(ctx, &format!("Database not ready: {e}"))
                     .await;
             }
         };
@@ -255,7 +247,7 @@ impl SlashCommand for ChatbotCommand {
             }
             Err(e) => {
                 return self
-                    .respond_error(ctx, &format!("Failed to check chatbot setup: {}", e))
+                    .respond_error(ctx, &format!("Failed to check chatbot setup: {e}"))
                     .await;
             }
             _ => {}
@@ -373,7 +365,7 @@ impl SlashCommand for ChatbotCommand {
             .await
         {
             return self
-                .respond_error_followup(ctx, &format!("Failed to save chatbot setup: {}", e))
+                .respond_error_followup(ctx, &format!("Failed to save chatbot setup: {e}"))
                 .await;
         }
 

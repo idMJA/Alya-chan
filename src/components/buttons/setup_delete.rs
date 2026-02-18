@@ -31,7 +31,7 @@ impl SetupDeleteButton {
             let mut headers = reqwest::header::HeaderMap::new();
             headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
             if let Some(key) = &gc.api_key {
-                headers.insert(AUTHORIZATION, format!("Bearer {}", key).parse().unwrap());
+                headers.insert(AUTHORIZATION, format!("Bearer {key}").parse().unwrap());
             }
 
             let _ = client
@@ -53,7 +53,7 @@ impl SetupDeleteButton {
 
 #[async_trait]
 impl ComponentHandler for SetupDeleteButton {
-    fn custom_id_pattern(&self) -> &str {
+    fn custom_id_pattern(&self) -> &'static str {
         "setup_del_*"
     }
 
@@ -85,16 +85,16 @@ impl ComponentHandler for SetupDeleteButton {
                 if let Some(gid) = guild_id {
                     let success = Self::delete_chatbot(gid).await.unwrap_or(false);
                     let content = if success {
-                        format!("{} Chatbot setup deleted.", emoji_yes)
+                        format!("{emoji_yes} Chatbot setup deleted.")
                     } else {
-                        format!("{} Failed to delete chatbot setup.", emoji_no)
+                        format!("{emoji_no} Failed to delete chatbot setup.")
                     };
                     (build_status_container("Chatbot Setup", &content), vec![])
                 } else {
                     (
                         build_status_container(
                             "Chatbot Setup",
-                            &format!("{} Invalid request.", emoji_no),
+                            &format!("{emoji_no} Invalid request."),
                         ),
                         vec![],
                     )
@@ -103,7 +103,7 @@ impl ComponentHandler for SetupDeleteButton {
             "setup_del_chatbot_cancel" => (
                 build_status_container(
                     "Chatbot Setup",
-                    &format!("{} Cancellation acknowledged.", emoji_no),
+                    &format!("{emoji_no} Cancellation acknowledged."),
                 ),
                 vec![],
             ),
@@ -111,16 +111,16 @@ impl ComponentHandler for SetupDeleteButton {
                 if let Some(gid) = guild_id {
                     let success = Self::delete_globalchat(ctx, gid).await.unwrap_or(false);
                     let content = if success {
-                        format!("{} Global chat setup deleted.", emoji_yes)
+                        format!("{emoji_yes} Global chat setup deleted.")
                     } else {
-                        format!("{} Failed to delete global chat setup.", emoji_no)
+                        format!("{emoji_no} Failed to delete global chat setup.")
                     };
                     (build_status_container("Global Chat", &content), vec![])
                 } else {
                     (
                         build_status_container(
                             "Global Chat",
-                            &format!("{} Invalid request.", emoji_no),
+                            &format!("{emoji_no} Invalid request."),
                         ),
                         vec![],
                     )
@@ -129,7 +129,7 @@ impl ComponentHandler for SetupDeleteButton {
             "setup_del_globalchat_cancel" => (
                 build_status_container(
                     "Global Chat",
-                    &format!("{} Cancellation acknowledged.", emoji_no),
+                    &format!("{emoji_no} Cancellation acknowledged."),
                 ),
                 vec![],
             ),
@@ -172,7 +172,7 @@ fn build_status_container(title: &str, content: &str) -> Container {
         components: vec![
             Component::TextDisplay(TextDisplay {
                 id: None,
-                content: format!("## {}\n{}", title, content),
+                content: format!("## {title}\n{content}"),
             }),
             Component::Separator(Separator {
                 id: None,

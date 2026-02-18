@@ -242,6 +242,7 @@ struct RawEmoji {
 }
 
 impl Config {
+    #[allow(clippy::too_many_lines)]
     pub fn load_from_path(path: &str) -> Result<Self> {
         let content = fs::read_to_string(path)
             .with_context(|| format!("Config file not found or unreadable: {path}"))?;
@@ -263,7 +264,7 @@ impl Config {
                 .with_context(|| format!("Invalid URL for config.info.banner: {b}"))?;
             let scheme = parsed.scheme();
             if scheme != "http" && scheme != "https" {
-                anyhow::bail!("Unsupported URL scheme for config.info.banner: {}", b);
+                anyhow::bail!("Unsupported URL scheme for config.info.banner: {b}");
             }
             b
         };
@@ -271,7 +272,7 @@ impl Config {
         let mut emoji = EmojiConfig::default();
         if let Some(r) = raw.emoji {
             if let Some(s) = r.yes {
-                emoji.yes = s
+                emoji.yes = s;
             }
             if let Some(s) = r.no {
                 emoji.no = s;
@@ -451,6 +452,7 @@ impl Config {
 }
 
 impl Config {
+    #[allow(clippy::too_many_lines)]
     pub fn load_with_overrides(path: &str) -> Result<Self> {
         let mut cfg = Self::load_from_path(path)?;
         load_emoji_overrides(&mut cfg);

@@ -2,6 +2,7 @@ use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
 use twilight_model::application::command::Command;
 use twilight_model::application::interaction::application_command::CommandOptionValue;
+use twilight_model::channel::message::component::{ActionRow, Button, ButtonStyle, Component};
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
@@ -11,12 +12,13 @@ pub struct BanCommand;
 
 impl BanCommand {
     fn build_confirmation_text(target: u64, reason: Option<&str>, days: Option<i64>) -> String {
-        let mut s = format!("Are you sure you want to ban <@{}>?", target);
+        use std::fmt::Write;
+        let mut s = format!("Are you sure you want to ban <@{target}>?");
         if let Some(r) = reason {
-            s.push_str(&format!("\nReason: {}", r));
+            let _ = write!(s, "\nReason: {r}");
         }
         if let Some(d) = days {
-            s.push_str(&format!("\nDelete messages from last {} day(s)", d));
+            let _ = write!(s, "\nDelete messages from last {d} day(s)");
         }
         s
     }
@@ -30,7 +32,7 @@ impl BanCommand {
             components: vec![
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("## Ban Confirmation\n{}", content),
+                    content: format!("## Ban Confirmation\n{content}"),
                 }),
                 Component::Separator(Separator {
                     id: None,
@@ -46,11 +48,11 @@ impl BanCommand {
 
 #[async_trait]
 impl SlashCommand for BanCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "ban"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Ban a user from the guild (with confirmation)"
     }
 
@@ -70,13 +72,10 @@ impl SlashCommand for BanCommand {
     }
 
     async fn execute(&self, ctx: &SlashCommandContext) -> BotResult<()> {
-        let guild_id = match ctx.guild_id {
-            Some(id) => id,
-            None => {
-                return self
-                    .respond_error(ctx, "This command can only be used in a server")
-                    .await
-            }
+        let Some(guild_id) = ctx.guild_id else {
+            return self
+                .respond_error(ctx, "This command can only be used in a server")
+                .await;
         };
 
         let mut target: Option<twilight_model::id::Id<twilight_model::id::marker::UserMarker>> =
@@ -98,17 +97,10 @@ impl SlashCommand for BanCommand {
             }
         }
 
-        let target = match target {
-            Some(t) => t,
-            None => {
-                return self
-                    .respond_error(ctx, "You must specify a user to ban")
-                    .await
-            }
-        };
-
-        use twilight_model::channel::message::component::{
-            ActionRow, Button, ButtonStyle, Component,
+        let Some(target) = target else {
+            return self
+                .respond_error(ctx, "You must specify a user to ban")
+                .await;
         };
 
         let confirmation_text =

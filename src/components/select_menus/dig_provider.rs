@@ -10,7 +10,7 @@ pub struct DigProviderSelect;
 
 #[async_trait]
 impl ComponentHandler for DigProviderSelect {
-    fn custom_id_pattern(&self) -> &str {
+    fn custom_id_pattern(&self) -> &'static str {
         "dig_provider:*"
     }
 

@@ -1,6 +1,7 @@
 use crate::database::service::AlyaDatabase;
 use crate::types::error::BotError;
 use crate::types::{BotResult, EventContext};
+use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use std::collections::HashMap;
@@ -11,6 +12,7 @@ use twilight_model::gateway::payload::incoming::MessageCreate;
 
 const MAX_HISTORY_MESSAGES: usize = 10;
 const HISTORY_TTL_MINUTES: i64 = 10;
+const MAX_AUDIO_BYTES: usize = 5 * 1024 * 1024; // 5 MiB guardrail for audio downloads
 
 // In-memory chat history storage
 type ChatHistory = Arc<RwLock<HashMap<String, Vec<(String, String, DateTime<Utc>)>>>>;
@@ -18,8 +20,8 @@ type ChatHistory = Arc<RwLock<HashMap<String, Vec<(String, String, DateTime<Utc>
 static CHAT_HISTORY: tokio::sync::OnceCell<ChatHistory> = tokio::sync::OnceCell::const_new();
 
 fn load_alya_system_message() -> String {
-    fs::read_to_string("src/models/alya-multi.txt").unwrap_or_else(|e| {
-        tracing::warn!("Failed to load alya-multi.txt: {}, using fallback", e);
+    fs::read_to_string("src/models/alya-id.txt").unwrap_or_else(|e| {
+        tracing::warn!("Failed to load alya-id.txt: {}, using fallback", e);
 
         "You are Alya, a helpful and friendly Discord bot assistant. You are cheerful, knowledgeable, and always ready to help users with their questions. Keep responses concise and friendly.".to_string()
     })
@@ -142,12 +144,76 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         },
     );
 
+    let mut content_parts = vec![json!({
+        "type": "text",
+        "text": user_message_content.clone(),
+    })];
+
+    let mut attachment_notes = Vec::new();
+
+    let client = reqwest::Client::new();
+
+    for attachment in &msg.attachments {
+        let content_type = attachment.content_type.as_deref();
+        let filename = attachment.filename.as_str();
+        let url = &attachment.url;
+
+        if is_image(content_type, filename) {
+            content_parts.push(json!({
+                "type": "image_url",
+                "image_url": { "url": url }
+            }));
+            attachment_notes.push(format!("image: {}", filename));
+            continue;
+        }
+
+        if is_video(content_type, filename) {
+            content_parts.push(json!({
+                "type": "video_url",
+                "video_url": { "url": url }
+            }));
+            attachment_notes.push(format!("video: {}", filename));
+            continue;
+        }
+
+        if is_audio(content_type, filename) {
+            match fetch_audio_base64(&client, url, content_type, filename).await {
+                Ok((data, format)) => {
+                    content_parts.push(json!({
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": data,
+                            "format": format
+                        }
+                    }));
+                    attachment_notes.push(format!("audio: {}", filename));
+                }
+                Err(err) => {
+                    tracing::warn!("Audio attachment skipped ({}): {}", filename, err);
+                }
+            }
+        }
+    }
+
+    let user_message_payload_content = if content_parts.len() == 1 {
+        json!(user_message_content)
+    } else {
+        json!(content_parts)
+    };
+
+    let mut user_message_for_history = user_message_content.clone();
+    if !attachment_notes.is_empty() {
+        user_message_for_history.push_str("\n[attachments: ");
+        user_message_for_history.push_str(&attachment_notes.join(", "));
+        user_message_for_history.push(']');
+    }
+
     let now = Utc::now();
 
     // Append current user message to payload
     messages.push(json!({
         "role": "user",
-        "content": user_message_content
+        "content": user_message_payload_content
     }));
 
     // Store user message in memory
@@ -156,7 +222,7 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         history_map
             .entry(user_key.clone())
             .or_insert_with(Vec::new)
-            .push(("user".to_string(), user_message_content.clone(), now));
+            .push(("user".to_string(), user_message_for_history.clone(), now));
     }
 
     let _ = ctx.bot.http.create_typing_trigger(msg.channel_id).await;
@@ -164,7 +230,7 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
     let client = reqwest::Client::new();
 
     let request_body = json!({
-        "model": "meta-llama/llama-3.1-8b-instruct",
+        "model": "openrouter/auto",
         "messages": messages,
         "temperature": 0.7,
         "metadata": {
@@ -204,7 +270,6 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
                 {
                     let messages = split_message(reply, 2000);
 
-                    // Store assistant response in memory
                     {
                         let mut history_map = history_store.write().await;
                         history_map
@@ -270,4 +335,64 @@ fn split_message(text: &str, max_length: usize) -> Vec<String> {
     }
 
     result
+}
+
+fn is_image(content_type: Option<&str>, filename: &str) -> bool {
+    let ext = file_ext(filename);
+    matches!(
+        ext.as_deref(),
+        Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff")
+    ) || content_type.is_some_and(|ct| ct.starts_with("image/"))
+}
+
+fn is_video(content_type: Option<&str>, filename: &str) -> bool {
+    let ext = file_ext(filename);
+    matches!(ext.as_deref(), Some("mp4" | "mov" | "webm" | "mkv" | "avi"))
+        || content_type.is_some_and(|ct| ct.starts_with("video/"))
+}
+
+fn is_audio(content_type: Option<&str>, filename: &str) -> bool {
+    let ext = file_ext(filename);
+    matches!(ext.as_deref(), Some("mp3" | "wav" | "flac" | "ogg" | "m4a"))
+        || content_type.is_some_and(|ct| ct.starts_with("audio/"))
+}
+
+fn file_ext(filename: &str) -> Option<String> {
+    filename
+        .rsplit('.')
+        .next()
+        .map(|ext| ext.to_ascii_lowercase())
+}
+
+fn audio_format_from(content_type: Option<&str>, filename: &str) -> String {
+    if let Some(ct) = content_type {
+        if let Some(short) = ct.strip_prefix("audio/") {
+            return short.to_string();
+        }
+    }
+
+    file_ext(filename).unwrap_or_else(|| "wav".to_string())
+}
+
+async fn fetch_audio_base64(
+    client: &reqwest::Client,
+    url: &str,
+    content_type: Option<&str>,
+    filename: &str,
+) -> Result<(String, String), String> {
+    let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
+
+    if let Some(len) = resp.content_length() {
+        if len as usize > MAX_AUDIO_BYTES {
+            return Err(format!("audio too large ({} bytes)", len));
+        }
+    }
+
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.len() > MAX_AUDIO_BYTES {
+        return Err(format!("audio too large ({} bytes)", bytes.len()));
+    }
+
+    let format = audio_format_from(content_type, filename);
+    Ok((general_purpose::STANDARD.encode(bytes), format))
 }

@@ -15,11 +15,11 @@ pub struct MultiDigCommand;
 
 #[async_trait]
 impl SlashCommand for MultiDigCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "multi-dig"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Perform a DNS lookup with multiple record types"
     }
 
@@ -73,7 +73,7 @@ impl SlashCommand for MultiDigCommand {
                 }
                 "provider" => {
                     if let CommandOptionValue::String(s) = &opt.value {
-                        provider = s.clone();
+                        provider.clone_from(s);
                     }
                 }
                 _ => {}
@@ -176,7 +176,7 @@ impl SlashCommand for MultiDigCommand {
                     out.push(CommandOptionChoice {
                         name: "*".to_string(),
                         name_localizations: None,
-                        value: CommandOptionChoiceValue::String(format!("{}*", prefix)),
+                        value: CommandOptionChoiceValue::String(format!("{prefix}*")),
                     });
                 }
 
@@ -188,7 +188,7 @@ impl SlashCommand for MultiDigCommand {
                         .map(|t| CommandOptionChoice {
                             name: t.to_string(),
                             name_localizations: None,
-                            value: CommandOptionChoiceValue::String(format!("{}{}", prefix, t)),
+                            value: CommandOptionChoiceValue::String(format!("{prefix}{t}")),
                         }),
                 );
 

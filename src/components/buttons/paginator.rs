@@ -20,6 +20,7 @@ impl PaginatorButton {
 }
 
 #[async_trait]
+#[allow(clippy::too_many_lines)]
 impl ComponentHandler for PaginatorButton {
     fn custom_id_pattern(&self) -> &'static str {
         "pagination-page"
@@ -54,7 +55,7 @@ impl ComponentHandler for PaginatorButton {
                     .join("\n\n");
 
                 let embed = EmbedBuilder::new()
-                    .title(format!("{} Commands", category))
+                    .title(format!("{category} Commands"))
                     .description(description)
                     .build();
 
@@ -105,8 +106,8 @@ impl ComponentHandler for PaginatorButton {
                     page + 1
                 };
 
-                let prev_custom = format!("pagination-pagePrev:{}:{}", category, prev_page);
-                let next_custom = format!("pagination-pageNext:{}:{}", category, next_page);
+                let prev_custom = format!("pagination-pagePrev:{category}:{prev_page}");
+                let next_custom = format!("pagination-pageNext:{category}:{next_page}");
 
                 let buttons = vec![
                     Component::Button(twilight_model::channel::message::component::Button {

@@ -2,6 +2,7 @@ use crate::types::{BotResult, SlashCommand, SlashCommandContext};
 use async_trait::async_trait;
 use twilight_model::application::command::Command;
 use twilight_model::application::interaction::application_command::CommandOptionValue;
+use twilight_model::channel::message::component::{ActionRow, Button, ButtonStyle, Component};
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
@@ -11,12 +12,13 @@ pub struct TimeoutCommand;
 
 impl TimeoutCommand {
     fn build_confirmation_text(target: u64, seconds: Option<i64>, reason: Option<&str>) -> String {
-        let mut s = format!("Are you sure you want to timeout <@{}>?", target);
+        use std::fmt::Write;
+        let mut s = format!("Are you sure you want to timeout <@{target}>?");
         if let Some(sec) = seconds {
-            s.push_str(&format!("\nDuration: {} seconds", sec));
+            let _ = write!(s, "\nDuration: {sec} seconds");
         }
         if let Some(r) = reason {
-            s.push_str(&format!("\nReason: {}", r));
+            let _ = write!(s, "\nReason: {r}");
         }
         s
     }
@@ -30,7 +32,7 @@ impl TimeoutCommand {
             components: vec![
                 Component::TextDisplay(TextDisplay {
                     id: None,
-                    content: format!("## Timeout Confirmation\n{}", content),
+                    content: format!("## Timeout Confirmation\n{content}"),
                 }),
                 Component::Separator(Separator {
                     id: None,
@@ -46,11 +48,11 @@ impl TimeoutCommand {
 
 #[async_trait]
 impl SlashCommand for TimeoutCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "timeout"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Timeout a user (communication disabled)"
     }
 
@@ -67,13 +69,10 @@ impl SlashCommand for TimeoutCommand {
     }
 
     async fn execute(&self, ctx: &SlashCommandContext) -> BotResult<()> {
-        let guild_id = match ctx.guild_id {
-            Some(id) => id,
-            None => {
-                return self
-                    .respond_error(ctx, "This command can only be used in a server")
-                    .await
-            }
+        let Some(guild_id) = ctx.guild_id else {
+            return self
+                .respond_error(ctx, "This command can only be used in a server")
+                .await;
         };
 
         let mut target: Option<twilight_model::id::Id<twilight_model::id::marker::UserMarker>> =
@@ -95,25 +94,15 @@ impl SlashCommand for TimeoutCommand {
             }
         }
 
-        let target = match target {
-            Some(t) => t,
-            None => {
-                return self
-                    .respond_error(ctx, "You must specify a user to timeout")
-                    .await
-            }
+        let Some(target) = target else {
+            return self
+                .respond_error(ctx, "You must specify a user to timeout")
+                .await;
         };
-        let seconds = match seconds {
-            Some(s) => s,
-            None => {
-                return self
-                    .respond_error(ctx, "You must specify a duration in seconds")
-                    .await
-            }
-        };
-
-        use twilight_model::channel::message::component::{
-            ActionRow, Button, ButtonStyle, Component,
+        let Some(seconds) = seconds else {
+            return self
+                .respond_error(ctx, "You must specify a duration in seconds")
+                .await;
         };
 
         let confirmation_text =

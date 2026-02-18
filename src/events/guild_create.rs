@@ -48,10 +48,8 @@ impl EventHandler for GuildCreateHandler {
         if let Event::GuildCreate(guild) = &ctx.event {
             let guild_id = guild.id();
 
-            // Track this guild as seen
             Self::track_guild(guild_id.get());
 
-            // Only log if after startup AND this is a new guild
             if Self::is_startup_complete() && Self::is_new_guild(guild_id.get()) {
                 tracing::info!("Joined guild (ID: {})", guild_id);
             }

@@ -8,11 +8,11 @@ pub struct UserInfoCommand;
 
 #[async_trait]
 impl SlashCommand for UserInfoCommand {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "userinfo"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Get information about a user"
     }
 

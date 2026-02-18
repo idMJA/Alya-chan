@@ -24,13 +24,11 @@ impl ReadyHandler {
             commands.len()
         );
 
-        // Build all commands using CommandBuilder
         let mut built_commands = Vec::new();
         for command in commands {
             built_commands.push(command.build());
         }
 
-        // Register all commands at once (idempotent)
         ctx.bot
             .http
             .interaction(application_id)
@@ -113,10 +111,8 @@ impl EventHandler for ReadyHandler {
 
             let current_shard = ready.shard.map_or(0, twilight_gateway::ShardId::number);
             if current_shard == 0 {
-                // Register all slash commands to Discord
                 self.register_commands(ctx, ready.application.id).await?;
 
-                // Start rotating presence task
                 let handler = Self;
                 let cache = ctx.bot.cache.clone();
                 let presence_tx = ctx.bot.presence_tx.clone();
@@ -133,7 +129,6 @@ impl EventHandler for ReadyHandler {
                         let cache = ctx.bot.cache.clone();
                         let shard_count = ctx.bot.shard_count;
 
-                        // Spawn auto-posting task
                         tokio::spawn(async move {
                             if let Err(e) = poster.start_auto_posting(cache, shard_count).await {
                                 tracing::error!("[Top.gg] Failed to start auto poster: {}", e);

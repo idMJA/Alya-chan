@@ -16,7 +16,7 @@ impl CommandManager {
         }
     }
 
-    pub fn register(&mut self, category: &str, command: Arc<dyn SlashCommand>) {
+    pub fn register(&mut self, category: &str, command: &Arc<dyn SlashCommand>) {
         let name = command.name().to_lowercase();
         let category_string = category.to_string();
 

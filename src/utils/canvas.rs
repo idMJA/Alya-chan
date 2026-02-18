@@ -56,18 +56,18 @@ impl ShipCanvas {
             surfaces::raster_n32_premul((1280, 720)).ok_or("Failed to create surface")?;
         let canvas = surface.canvas();
 
-        self.draw_bg(canvas, bg_bytes);
+        Self::draw_bg(canvas, bg_bytes);
 
         if let Some(data) = avatar1 {
-            self.draw_avatar(canvas, &data, 619.4, 205.1, 97.2)?;
+            Self::draw_avatar(canvas, &data, 619.4, 205.1, 97.2)?;
         }
         if let Some(data) = avatar2 {
-            self.draw_avatar(canvas, &data, 151.0, 433.7, 97.2)?;
+            Self::draw_avatar(canvas, &data, 151.0, 433.7, 97.2)?;
         }
 
         self.draw_text(canvas, name1, 415.0, 254.3);
         self.draw_text(canvas, name2, 464.7, 481.0);
-        self.draw_percent(canvas, percentage, 440.6, 363.5);
+        Self::draw_percent(canvas, percentage, 440.6, 363.5);
 
         let img = surface.image_snapshot();
 
@@ -79,7 +79,7 @@ impl ShipCanvas {
         Ok(data.as_bytes().to_vec())
     }
 
-    fn draw_bg(&self, canvas: &Canvas, bg_bytes: Option<&[u8]>) {
+    fn draw_bg(canvas: &Canvas, bg_bytes: Option<&[u8]>) {
         if let Some(bytes) = bg_bytes {
             tracing::debug!(
                 "Attempting to decode background image: {} bytes",
@@ -121,7 +121,6 @@ impl ShipCanvas {
     }
 
     fn draw_avatar(
-        &self,
         canvas: &Canvas,
         data: &[u8],
         x: f32,
@@ -179,7 +178,7 @@ impl ShipCanvas {
         canvas.draw_str(&clean, (cx, cy), &final_font, &paint);
     }
 
-    fn draw_percent(&self, canvas: &Canvas, pct: u32, x: f32, y: f32) {
+    fn draw_percent(canvas: &Canvas, pct: u32, x: f32, y: f32) {
         let mut paint = Paint::default();
         paint.set_color(Color::WHITE);
         paint.set_anti_alias(true);
@@ -208,6 +207,7 @@ pub fn calc_love(id1: &str, id2: &str) -> u32 {
     u32::try_from(hash.abs() % 101).unwrap_or(0)
 }
 
+#[allow(clippy::cast_sign_loss)]
 pub fn ship_name(n1: &str, n2: &str) -> String {
     #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     let mid1 = (n1.len() as f64 / 2.0).ceil() as usize;
