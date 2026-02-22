@@ -23,7 +23,6 @@ impl ComponentHandler for ChatbotCreateButton {
 
     async fn handle(&self, ctx: &ComponentContext) -> BotResult<()> {
         let interaction = &ctx.interaction;
-        let application_id = interaction.application_id;
         let interaction_id = interaction.id;
         let token = interaction.token.clone();
 
@@ -44,10 +43,7 @@ impl ComponentHandler for ChatbotCreateButton {
             return update_message(ctx, interaction_id, &token, container, vec![]).await;
         };
 
-        let bot_id = match ctx.bot.cache.current_user() {
-            Some(user) => user.id,
-            None => application_id.cast(),
-        };
+        let bot_id = ctx.bot.bot_user.id;
 
         let everyone_role_id = guild_id;
 

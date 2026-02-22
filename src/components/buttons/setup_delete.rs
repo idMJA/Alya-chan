@@ -7,9 +7,7 @@ use twilight_model::channel::message::component::{
     Component, Container, Separator, SeparatorSpacingSize, TextDisplay,
 };
 use twilight_model::channel::message::MessageFlags;
-use twilight_model::http::interaction::{
-    InteractionResponse, InteractionResponseData, InteractionResponseType,
-};
+use twilight_model::http::interaction::{InteractionResponse, InteractionResponseType};
 
 pub struct SetupDeleteButton;
 
@@ -80,6 +78,19 @@ impl ComponentHandler for SetupDeleteButton {
         let emoji_yes = &ctx.bot.config.emoji.yes;
         let emoji_no = &ctx.bot.config.emoji.no;
 
+        ctx.bot
+            .http
+            .interaction(application_id.cast())
+            .create_response(
+                interaction_id.cast(),
+                &token,
+                &InteractionResponse {
+                    kind: InteractionResponseType::DeferredUpdateMessage,
+                    data: None,
+                },
+            )
+            .await?;
+
         let (container, components) = match action {
             "setup_del_chatbot_confirm" => {
                 if let Some(gid) = guild_id {
@@ -147,19 +158,9 @@ impl ComponentHandler for SetupDeleteButton {
         ctx.bot
             .http
             .interaction(application_id.cast())
-            .create_response(
-                interaction_id.cast(),
-                &token,
-                &InteractionResponse {
-                    kind: InteractionResponseType::UpdateMessage,
-                    data: Some(InteractionResponseData {
-                        content: None,
-                        components: Some(components),
-                        flags: Some(MessageFlags::IS_COMPONENTS_V2),
-                        ..Default::default()
-                    }),
-                },
-            )
+            .create_followup(&token)
+            .components(&components)
+            .flags(MessageFlags::IS_COMPONENTS_V2)
             .await?;
 
         Ok(())

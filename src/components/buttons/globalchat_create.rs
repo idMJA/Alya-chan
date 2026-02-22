@@ -70,10 +70,7 @@ impl ComponentHandler for GlobalChatCreateButton {
         };
 
         // Create new channel
-        let bot_id = match ctx.bot.cache.current_user() {
-            Some(user) => user.id,
-            None => application_id.cast(),
-        };
+        let bot_id = ctx.bot.bot_user.id;
 
         let permission_overwrites = vec![
             PermissionOverwrite {
@@ -120,46 +117,27 @@ impl ComponentHandler for GlobalChatCreateButton {
             }
         };
 
-        // Send welcome message
-        let welcome_container = Container {
-            id: None,
-            components: vec![
-                Component::TextDisplay(TextDisplay {
-                    id: None,
-                    content: format!("## Welcome to Global Chat!\n{}", ctx.bot.config.emoji.globe),
-                }),
-                Component::Separator(Separator {
-                    id: None,
-                    divider: Some(true),
-                    spacing: None,
-                }),
-                Component::TextDisplay(TextDisplay {
-                    id: None,
-                    content: format!(
-                        "This channel is connected to a network of servers using Alya-chan.\n\
-                        Messages sent here will be broadcasted to all connected servers.\n\n\
-                        **Rules:**\n\
-                        {} Be respectful to all users\n\
-                        {} Follow Discord's Terms of Service\n\
-                        {} No spam or advertising\n\
-                        {} Have fun and make new friends!",
-                        ctx.bot.config.emoji.info,
-                        ctx.bot.config.emoji.info,
-                        ctx.bot.config.emoji.warn,
-                        ctx.bot.config.emoji.heart
-                    ),
-                }),
-            ],
-            accent_color: Some(Some(ctx.bot.config.color.primary)),
-            spoiler: None,
-        };
+        // Send welcome message (plain content; components V2 are interaction-only)
+        let welcome_message = format!(
+            "## Welcome to Global Chat!\n{globe}\n\n\
+            This channel is connected to a network of servers using Alya-chan.\n\
+            Messages sent here will be broadcasted to all connected servers.\n\n\
+            **Rules:**\n\
+            {info} Be respectful to all users\n\
+            {info} Follow Discord's Terms of Service\n\
+            {warn} No spam or advertising\n\
+            {heart} Have fun and make new friends!",
+            globe = ctx.bot.config.emoji.globe,
+            info = ctx.bot.config.emoji.info,
+            warn = ctx.bot.config.emoji.warn,
+            heart = ctx.bot.config.emoji.heart
+        );
 
         if let Err(e) = ctx
             .bot
             .http
             .create_message(new_channel.id)
-            .components(&[Component::Container(welcome_container)])
-            .flags(MessageFlags::IS_COMPONENTS_V2)
+            .content(&welcome_message)
             .await
         {
             return self
