@@ -9,6 +9,7 @@ services:
     volumes:
       - ./config.toml:/app/config.toml:ro
       - ./emoji.toml:/app/emoji.toml:ro
+      - ./assets:/app/assets:ro
       - ./src/models:/app/src/models:ro
       - ./data:/app/data
     restart: unless-stopped
