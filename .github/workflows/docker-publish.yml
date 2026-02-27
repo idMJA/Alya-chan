@@ -1,15 +1,6 @@
 name: Build and Publish Docker Image
 
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'Dockerfile'
-      - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
 
 jobs:
