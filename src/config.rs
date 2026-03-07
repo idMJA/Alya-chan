@@ -34,7 +34,7 @@ pub struct DatabaseConfig {
 pub struct ChatbotConfig {
     pub enabled: bool,
     pub api_key: String,
-    pub gemini_api_key: String,
+    pub gemini_api_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -171,7 +171,14 @@ struct RawWebhook {
 struct RawChatbot {
     enabled: bool,
     api_key: String,
-    gemini_api_key: Option<String>,
+    gemini_api_key: Option<RawGeminiApiKey>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RawGeminiApiKey {
+    Single(String),
+    Multiple(Vec<String>),
 }
 
 #[derive(Deserialize)]
@@ -435,10 +442,28 @@ impl Config {
                 api_url: gc.api_url,
                 api_key: gc.api_key,
             }),
-            chatbot: raw.chatbot.map(|cb| ChatbotConfig {
-                enabled: cb.enabled,
-                gemini_api_key: cb.gemini_api_key.unwrap_or_else(|| cb.api_key.clone()),
-                api_key: cb.api_key,
+            chatbot: raw.chatbot.map(|cb| {
+                let mut gemini_api_keys: Vec<String> = cb
+                    .gemini_api_key
+                    .map(|value| match value {
+                        RawGeminiApiKey::Single(value) => vec![value],
+                        RawGeminiApiKey::Multiple(values) => values,
+                    })
+                    .unwrap_or_else(|| vec![cb.api_key.clone()])
+                    .into_iter()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty())
+                    .collect();
+
+                if gemini_api_keys.is_empty() {
+                    gemini_api_keys.push(cb.api_key.clone());
+                }
+
+                ChatbotConfig {
+                    enabled: cb.enabled,
+                    gemini_api_keys,
+                    api_key: cb.api_key,
+                }
             }),
             top_gg: raw.top_gg.map(|tg| TopGgConfig {
                 enabled: tg.enabled,

@@ -297,84 +297,143 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         }
     });
 
-    let endpoint = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={}",
-        chatbot_config.gemini_api_key
-    );
+    let mut gemini_api_keys = chatbot_config.gemini_api_keys.clone();
+    if gemini_api_keys.is_empty() {
+        gemini_api_keys.push(chatbot_config.api_key.clone());
+    }
 
-    match client.post(endpoint).json(&request_body).send().await {
-        Ok(response) => match response.json::<serde_json::Value>().await {
-            Ok(data) => {
-                if let Some(reply) = data
-                    .get("candidates")
-                    .and_then(|c| c.as_array())
-                    .and_then(|arr| arr.first())
-                    .and_then(|candidate| candidate.get("content"))
-                    .and_then(|content| content.get("parts"))
-                    .and_then(|parts| parts.as_array())
-                {
-                    let reply = reply
-                        .iter()
-                        .filter_map(|part| part.get("text").and_then(|text| text.as_str()))
-                        .collect::<Vec<_>>()
-                        .join("\n");
+    let start_index = (msg.id.get() as usize) % gemini_api_keys.len();
+    let ordered_keys: Vec<&str> = (0..gemini_api_keys.len())
+        .map(|offset| gemini_api_keys[(start_index + offset) % gemini_api_keys.len()].as_str())
+        .collect();
 
-                    if reply.trim().is_empty() {
-                        tracing::warn!("No text content in Gemini API response parts");
-                        return Ok(());
-                    }
+    let mut responded = false;
+    let mut last_error = None;
 
-                    let messages = split_message(&reply, 2000);
+    for (attempt, api_key) in ordered_keys.iter().enumerate() {
+        let endpoint = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={api_key}"
+        );
 
-                    {
-                        let mut history_map = history_store.write().await;
-                        history_map
-                            .entry(user_key.clone())
-                            .or_insert_with(Vec::new)
-                            .push(("assistant".to_string(), reply.clone(), Utc::now()));
-                    }
-
-                    for message_part in messages {
-                        let _ = ctx.bot.http.create_typing_trigger(msg.channel_id).await;
-
-                        ctx.bot
-                            .http
-                            .create_message(msg.channel_id)
-                            .content(&message_part)
-                            .reply(msg.id)
-                            .await?;
-                    }
-
-                    tracing::info!(
-                        "Chatbot responded in guild {} channel {}",
-                        guild_id,
-                        msg.channel_id
+        match client.post(&endpoint).json(&request_body).send().await {
+            Ok(response) => {
+                let status = response.status();
+                if !status.is_success() {
+                    let body = response.text().await.unwrap_or_default();
+                    tracing::warn!(
+                        "Gemini request failed with status {} on key attempt {}/{}",
+                        status,
+                        attempt + 1,
+                        ordered_keys.len()
                     );
-                } else {
-                    tracing::warn!("No content in Gemini API response: {}", data);
+                    last_error = Some(format!("status {}: {}", status, body));
+                    continue;
+                }
+
+                match response.json::<serde_json::Value>().await {
+                    Ok(data) => {
+                        if let Some(reply) = data
+                            .get("candidates")
+                            .and_then(|c| c.as_array())
+                            .and_then(|arr| arr.first())
+                            .and_then(|candidate| candidate.get("content"))
+                            .and_then(|content| content.get("parts"))
+                            .and_then(|parts| parts.as_array())
+                        {
+                            let reply = reply
+                                .iter()
+                                .filter_map(|part| part.get("text").and_then(|text| text.as_str()))
+                                .collect::<Vec<_>>()
+                                .join("\n");
+
+                            if reply.trim().is_empty() {
+                                tracing::warn!(
+                                    "Gemini response has empty text on key attempt {}/{}",
+                                    attempt + 1,
+                                    ordered_keys.len()
+                                );
+                                last_error = Some("empty response text".to_string());
+                                continue;
+                            }
+
+                            let messages = split_message(&reply, 2000);
+
+                            {
+                                let mut history_map = history_store.write().await;
+                                history_map
+                                    .entry(user_key.clone())
+                                    .or_insert_with(Vec::new)
+                                    .push(("assistant".to_string(), reply.clone(), Utc::now()));
+                            }
+
+                            for message_part in messages {
+                                let _ = ctx.bot.http.create_typing_trigger(msg.channel_id).await;
+
+                                ctx.bot
+                                    .http
+                                    .create_message(msg.channel_id)
+                                    .content(&message_part)
+                                    .reply(msg.id)
+                                    .await?;
+                            }
+
+                            tracing::info!(
+                                "Chatbot responded in guild {} channel {} using key attempt {}/{}",
+                                guild_id,
+                                msg.channel_id,
+                                attempt + 1,
+                                ordered_keys.len()
+                            );
+
+                            responded = true;
+                            break;
+                        }
+
+                        tracing::warn!(
+                            "No content in Gemini API response on key attempt {}/{}: {}",
+                            attempt + 1,
+                            ordered_keys.len(),
+                            data
+                        );
+                        last_error = Some("missing candidates content".to_string());
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to parse Gemini API response on key attempt {}/{}: {:?}",
+                            attempt + 1,
+                            ordered_keys.len(),
+                            e
+                        );
+                        last_error = Some(e.to_string());
+                    }
                 }
             }
             Err(e) => {
-                tracing::error!("Failed to parse chatbot API response: {:?}", e);
-
-                ctx.bot
-                    .http
-                    .create_message(msg.channel_id)
-                    .content("Sorry, I'm experiencing some issues right now.")
-                    .reply(msg.id)
-                    .await?;
+                tracing::warn!(
+                    "Failed to call Gemini API on key attempt {}/{}: {:?}",
+                    attempt + 1,
+                    ordered_keys.len(),
+                    e
+                );
+                last_error = Some(e.to_string());
             }
-        },
-        Err(e) => {
-            tracing::error!("Failed to call chatbot API: {:?}", e);
-
-            ctx.bot
-                .http
-                .create_message(msg.channel_id)
-                .content("Sorry, I'm experiencing some issues right now.")
-                .reply(msg.id)
-                .await?;
         }
+    }
+
+    if !responded {
+        tracing::error!(
+            "All Gemini API key attempts failed for guild {} channel {}: {}",
+            guild_id,
+            msg.channel_id,
+            last_error.unwrap_or_else(|| "unknown error".to_string())
+        );
+
+        ctx.bot
+            .http
+            .create_message(msg.channel_id)
+            .content("Sorry, I'm experiencing some issues right now.")
+            .reply(msg.id)
+            .await?;
     }
 
     Ok(())
