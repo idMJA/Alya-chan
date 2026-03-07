@@ -34,6 +34,7 @@ pub struct DatabaseConfig {
 pub struct ChatbotConfig {
     pub enabled: bool,
     pub api_key: String,
+    pub gemini_api_key: String,
 }
 
 #[derive(Debug, Clone)]
@@ -170,6 +171,7 @@ struct RawWebhook {
 struct RawChatbot {
     enabled: bool,
     api_key: String,
+    gemini_api_key: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -435,6 +437,7 @@ impl Config {
             }),
             chatbot: raw.chatbot.map(|cb| ChatbotConfig {
                 enabled: cb.enabled,
+                gemini_api_key: cb.gemini_api_key.unwrap_or_else(|| cb.api_key.clone()),
                 api_key: cb.api_key,
             }),
             top_gg: raw.top_gg.map(|tg| TopGgConfig {

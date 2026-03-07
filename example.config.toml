@@ -40,6 +40,8 @@ api_key = "your_global_chat_api_key_here"
 enabled = false
 # OpenRouter API key (get from https://openrouter.ai/keys)
 api_key = "your_openrouter_api_key_here"
+# Google Gemini API key (get from https://aistudio.google.com/api-keys)
+gemini_api_key = "your_google_gemini_api_key_here"
 
 [top-gg]
 # Enable or disable Top.gg stats posting

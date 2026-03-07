@@ -12,18 +12,52 @@ use twilight_model::gateway::payload::incoming::MessageCreate;
 
 const MAX_HISTORY_MESSAGES: usize = 10;
 const HISTORY_TTL_MINUTES: i64 = 10;
-const MAX_AUDIO_BYTES: usize = 5 * 1024 * 1024; // 5 MiB guardrail for audio downloads
+const MAX_INLINE_FILE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_INLINE_TOTAL_BYTES: usize = 18 * 1024 * 1024;
 
 // In-memory chat history storage
 type ChatHistory = Arc<RwLock<HashMap<String, Vec<(String, String, DateTime<Utc>)>>>>;
 
 static CHAT_HISTORY: tokio::sync::OnceCell<ChatHistory> = tokio::sync::OnceCell::const_new();
 
-fn load_alya_system_message() -> String {
-    fs::read_to_string("src/models/alya-id.txt").unwrap_or_else(|e| {
-        tracing::warn!("Failed to load alya-id.txt: {}, using fallback", e);
+fn normalize_chatbot_language(language: &str) -> &'static str {
+    let normalized = language.trim().to_lowercase();
+    match normalized.as_str() {
+        "id" | "indonesia" | "indonesian" | "bahasa" | "bahasa indonesia" => "id",
+        "en" | "english" | "inggris" | "bahasa inggris" => "en",
+        _ => "id",
+    }
+}
 
-        "You are Alya, a helpful and friendly Discord bot assistant. You are cheerful, knowledgeable, and always ready to help users with their questions. Keep responses concise and friendly.".to_string()
+fn locale_to_chatbot_language(locale: &str) -> &'static str {
+    if locale.trim().to_lowercase().starts_with("id") {
+        "id"
+    } else {
+        "en"
+    }
+}
+
+fn fallback_system_message(language: &str) -> &'static str {
+    match normalize_chatbot_language(language) {
+        "en" => {
+            "You are Alya, a helpful and friendly Discord bot assistant. You are cheerful, knowledgeable, and always ready to help users with their questions. Keep responses concise and friendly."
+        }
+        _ => {
+            "kamu adalah alya, asisten bot discord yang membantu dan ramah. kamu ceria, berpengetahuan, dan selalu siap membantu pertanyaan user. balas singkat dan to the point."
+        }
+    }
+}
+
+fn load_alya_system_message(language: &str) -> String {
+    let normalized = normalize_chatbot_language(language);
+    let path = match normalized {
+        "en" => "src/models/alya-en.txt",
+        _ => "src/models/alya-id.txt",
+    };
+
+    fs::read_to_string(path).unwrap_or_else(|e| {
+        tracing::warn!("Failed to load {}: {}, using fallback", path, e);
+        fallback_system_message(normalized).to_string()
     })
 }
 
@@ -99,18 +133,51 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         return Ok(());
     }
 
-    let system_message = load_alya_system_message();
+    let preferred_language = match db
+        .get_user_chatbot_language(&msg.author.id.to_string())
+        .await
+    {
+        Ok(Some(language)) => normalize_chatbot_language(&language).to_string(),
+        Ok(None) => match db.get_chatbot_locale(&guild_id.to_string()).await {
+            Ok(chatbot_locale) => normalize_chatbot_language(&chatbot_locale).to_string(),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to fetch guild chatbot locale for {}: {}, trying guild locale",
+                    guild_id,
+                    e
+                );
+                match db.get_locale(&guild_id.to_string()).await {
+                    Ok(locale) => locale_to_chatbot_language(&locale).to_string(),
+                    Err(locale_err) => {
+                        tracing::warn!(
+                            "Failed to fetch guild locale for {}, defaulting chatbot language to id: {}",
+                            guild_id,
+                            locale_err
+                        );
+                        "id".to_string()
+                    }
+                }
+            }
+        },
+        Err(e) => {
+            tracing::warn!(
+                "Failed to fetch user chatbot language for {}: {}, defaulting to id",
+                msg.author.id,
+                e
+            );
+            "id".to_string()
+        }
+    };
+
+    let system_message = load_alya_system_message(&preferred_language);
 
     // Use in-memory chat history (no DB persistence)
     let history_store = CHAT_HISTORY
         .get_or_init(|| async { Arc::new(RwLock::new(HashMap::new())) })
         .await;
 
-    // Fetch recent history from memory
-    let mut messages = vec![json!({
-        "role": "system",
-        "content": system_message
-    })];
+    // Build Gemini conversation history (system instruction is sent separately)
+    let mut history_contents = Vec::new();
 
     let user_key = msg.author.id.to_string();
     let cutoff_time = Utc::now() - chrono::Duration::minutes(HISTORY_TTL_MINUTES);
@@ -122,9 +189,10 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
                 user_history.iter().rev().take(MAX_HISTORY_MESSAGES).rev()
             {
                 if *timestamp > cutoff_time {
-                    messages.push(json!({
-                        "role": role,
-                        "content": content
+                    let gemini_role = if role == "assistant" { "model" } else { "user" };
+                    history_contents.push(json!({
+                        "role": gemini_role,
+                        "parts": [{ "text": content }]
                     }));
                 }
             }
@@ -144,62 +212,52 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
         },
     );
 
-    let mut content_parts = vec![json!({
-        "type": "text",
-        "text": user_message_content.clone(),
-    })];
-
     let mut attachment_notes = Vec::new();
+    let mut user_parts = vec![json!({ "text": user_message_content.clone() })];
+    let mut inline_total_bytes: usize = 0;
 
     let client = reqwest::Client::new();
 
     for attachment in &msg.attachments {
-        let content_type = attachment.content_type.as_deref();
         let filename = attachment.filename.as_str();
-        let url = &attachment.url;
+        let content_type = attachment
+            .content_type
+            .as_deref()
+            .unwrap_or("application/octet-stream");
 
-        if is_image(content_type, filename) {
-            content_parts.push(json!({
-                "type": "image_url",
-                "image_url": { "url": url }
-            }));
-            attachment_notes.push(format!("image: {}", filename));
+        let Some(mime_type) = normalize_attachment_mime(content_type, filename) else {
+            attachment_notes.push(format!("unsupported: {} ({})", filename, content_type));
+            continue;
+        };
+
+        if inline_total_bytes >= MAX_INLINE_TOTAL_BYTES {
+            attachment_notes.push(format!("skipped (request size limit): {}", filename));
             continue;
         }
 
-        if is_video(content_type, filename) {
-            content_parts.push(json!({
-                "type": "video_url",
-                "video_url": { "url": url }
-            }));
-            attachment_notes.push(format!("video: {}", filename));
-            continue;
-        }
-
-        if is_audio(content_type, filename) {
-            match fetch_audio_base64(&client, url, content_type, filename).await {
-                Ok((data, format)) => {
-                    content_parts.push(json!({
-                        "type": "input_audio",
-                        "input_audio": {
-                            "data": data,
-                            "format": format
-                        }
-                    }));
-                    attachment_notes.push(format!("audio: {}", filename));
-                }
-                Err(err) => {
-                    tracing::warn!("Audio attachment skipped ({}): {}", filename, err);
-                }
+        match fetch_inline_attachment_base64(
+            &client,
+            &attachment.url,
+            MAX_INLINE_FILE_BYTES,
+            MAX_INLINE_TOTAL_BYTES.saturating_sub(inline_total_bytes),
+        )
+        .await
+        {
+            Ok((data, used_bytes)) => {
+                user_parts.push(json!({
+                    "inline_data": {
+                        "mime_type": mime_type,
+                        "data": data
+                    }
+                }));
+                inline_total_bytes = inline_total_bytes.saturating_add(used_bytes);
+                attachment_notes.push(format!("attached: {} ({})", filename, mime_type));
+            }
+            Err(err) => {
+                attachment_notes.push(format!("skipped: {} ({})", filename, err));
             }
         }
     }
-
-    let user_message_payload_content = if content_parts.len() == 1 {
-        json!(user_message_content)
-    } else {
-        json!(content_parts)
-    };
 
     let mut user_message_for_history = user_message_content.clone();
     if !attachment_notes.is_empty() {
@@ -210,10 +268,10 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
 
     let now = Utc::now();
 
-    // Append current user message to payload
-    messages.push(json!({
+    // Append current user message to Gemini payload
+    history_contents.push(json!({
         "role": "user",
-        "content": user_message_payload_content
+        "parts": user_parts
     }));
 
     // Store user message in memory
@@ -230,52 +288,50 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
     let client = reqwest::Client::new();
 
     let request_body = json!({
-        "model": "openrouter/auto",
-        "messages": messages,
-        "temperature": 0.7,
-        "metadata": {
-            "guild_id": guild_id.to_string(),
-            "channel_id": msg.channel_id.to_string(),
+        "system_instruction": {
+            "parts": [{ "text": system_message }]
+        },
+        "contents": history_contents,
+        "generationConfig": {
+            "temperature": 1.0
         }
     });
 
-    let mut headers = reqwest::header::HeaderMap::new();
-    headers.insert(
-        reqwest::header::AUTHORIZATION,
-        format!("Bearer {}", chatbot_config.api_key)
-            .parse()
-            .unwrap(),
-    );
-    headers.insert(
-        reqwest::header::CONTENT_TYPE,
-        "application/json".parse().unwrap(),
+    let endpoint = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={}",
+        chatbot_config.gemini_api_key
     );
 
-    match client
-        .post("https://openrouter.ai/api/v1/chat/completions")
-        .headers(headers)
-        .json(&request_body)
-        .send()
-        .await
-    {
+    match client.post(endpoint).json(&request_body).send().await {
         Ok(response) => match response.json::<serde_json::Value>().await {
             Ok(data) => {
                 if let Some(reply) = data
-                    .get("choices")
+                    .get("candidates")
                     .and_then(|c| c.as_array())
                     .and_then(|arr| arr.first())
-                    .and_then(|choice| choice.get("message"))
-                    .and_then(|msg| msg.get("content"))
-                    .and_then(|content| content.as_str())
+                    .and_then(|candidate| candidate.get("content"))
+                    .and_then(|content| content.get("parts"))
+                    .and_then(|parts| parts.as_array())
                 {
-                    let messages = split_message(reply, 2000);
+                    let reply = reply
+                        .iter()
+                        .filter_map(|part| part.get("text").and_then(|text| text.as_str()))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    if reply.trim().is_empty() {
+                        tracing::warn!("No text content in Gemini API response parts");
+                        return Ok(());
+                    }
+
+                    let messages = split_message(&reply, 2000);
 
                     {
                         let mut history_map = history_store.write().await;
                         history_map
                             .entry(user_key.clone())
                             .or_insert_with(Vec::new)
-                            .push(("assistant".to_string(), reply.to_string(), Utc::now()));
+                            .push(("assistant".to_string(), reply.clone(), Utc::now()));
                     }
 
                     for message_part in messages {
@@ -295,7 +351,7 @@ pub async fn handle_chatbot(ctx: &EventContext, msg: &MessageCreate) -> BotResul
                         msg.channel_id
                     );
                 } else {
-                    tracing::warn!("No content in chatbot API response");
+                    tracing::warn!("No content in Gemini API response: {}", data);
                 }
             }
             Err(e) => {
@@ -337,62 +393,97 @@ fn split_message(text: &str, max_length: usize) -> Vec<String> {
     result
 }
 
-fn is_image(content_type: Option<&str>, filename: &str) -> bool {
-    let ext = file_ext(filename);
-    matches!(
-        ext.as_deref(),
-        Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff")
-    ) || content_type.is_some_and(|ct| ct.starts_with("image/"))
-}
-
-fn is_video(content_type: Option<&str>, filename: &str) -> bool {
-    let ext = file_ext(filename);
-    matches!(ext.as_deref(), Some("mp4" | "mov" | "webm" | "mkv" | "avi"))
-        || content_type.is_some_and(|ct| ct.starts_with("video/"))
-}
-
-fn is_audio(content_type: Option<&str>, filename: &str) -> bool {
-    let ext = file_ext(filename);
-    matches!(ext.as_deref(), Some("mp3" | "wav" | "flac" | "ogg" | "m4a"))
-        || content_type.is_some_and(|ct| ct.starts_with("audio/"))
-}
-
-fn file_ext(filename: &str) -> Option<String> {
-    filename
-        .rsplit('.')
-        .next()
-        .map(|ext| ext.to_ascii_lowercase())
-}
-
-fn audio_format_from(content_type: Option<&str>, filename: &str) -> String {
-    if let Some(ct) = content_type {
-        if let Some(short) = ct.strip_prefix("audio/") {
-            return short.to_string();
-        }
+fn normalize_attachment_mime(content_type: &str, filename: &str) -> Option<String> {
+    let ct = content_type.trim().to_ascii_lowercase();
+    if is_supported_gemini_mime(&ct) {
+        return Some(ct);
     }
 
-    file_ext(filename).unwrap_or_else(|| "wav".to_string())
+    let ext = filename
+        .rsplit('.')
+        .next()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+
+    let inferred = match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "heic" => "image/heic",
+        "heif" => "image/heif",
+        "mp4" => "video/mp4",
+        "mpeg" => "video/mpeg",
+        "mov" => "video/mov",
+        "avi" => "video/avi",
+        "flv" => "video/x-flv",
+        "mpg" => "video/mpg",
+        "webm" => "video/webm",
+        "wmv" => "video/wmv",
+        "3gp" | "3gpp" => "video/3gpp",
+        "wav" => "audio/wav",
+        "mp3" => "audio/mp3",
+        "aiff" => "audio/aiff",
+        "aac" => "audio/aac",
+        "ogg" => "audio/ogg",
+        "flac" => "audio/flac",
+        "pdf" => "application/pdf",
+        _ => return None,
+    };
+
+    Some(inferred.to_string())
 }
 
-async fn fetch_audio_base64(
+fn is_supported_gemini_mime(mime_type: &str) -> bool {
+    matches!(
+        mime_type,
+        "image/png"
+            | "image/jpeg"
+            | "image/webp"
+            | "image/heic"
+            | "image/heif"
+            | "video/mp4"
+            | "video/mpeg"
+            | "video/mov"
+            | "video/avi"
+            | "video/x-flv"
+            | "video/mpg"
+            | "video/webm"
+            | "video/wmv"
+            | "video/3gpp"
+            | "audio/wav"
+            | "audio/mp3"
+            | "audio/aiff"
+            | "audio/aac"
+            | "audio/ogg"
+            | "audio/flac"
+            | "application/pdf"
+    )
+}
+
+async fn fetch_inline_attachment_base64(
     client: &reqwest::Client,
     url: &str,
-    content_type: Option<&str>,
-    filename: &str,
-) -> Result<(String, String), String> {
+    max_file_bytes: usize,
+    remaining_budget_bytes: usize,
+) -> Result<(String, usize), String> {
     let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
 
     if let Some(len) = resp.content_length() {
-        if len as usize > MAX_AUDIO_BYTES {
-            return Err(format!("audio too large ({} bytes)", len));
+        if len as usize > max_file_bytes {
+            return Err(format!("file too large: {} bytes", len));
+        }
+        if len as usize > remaining_budget_bytes {
+            return Err(format!("request budget exceeded: {} bytes", len));
         }
     }
 
     let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
-    if bytes.len() > MAX_AUDIO_BYTES {
-        return Err(format!("audio too large ({} bytes)", bytes.len()));
+    if bytes.len() > max_file_bytes {
+        return Err(format!("file too large: {} bytes", bytes.len()));
+    }
+    if bytes.len() > remaining_budget_bytes {
+        return Err(format!("request budget exceeded: {} bytes", bytes.len()));
     }
 
-    let format = audio_format_from(content_type, filename);
-    Ok((general_purpose::STANDARD.encode(bytes), format))
+    Ok((general_purpose::STANDARD.encode(&bytes), bytes.len()))
 }

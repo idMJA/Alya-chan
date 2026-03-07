@@ -9,6 +9,8 @@ use uuid::Uuid;
 const DEFAULT_LOCALE: &str = "en-US";
 #[allow(dead_code)]
 const DEFAULT_PREFIX: &str = "!";
+#[allow(dead_code)]
+const DEFAULT_CHATBOT_LANGUAGE: &str = "id";
 const VOTE_PREMIUM_DURATION_HOURS: i64 = 12;
 
 pub struct ISetup {
@@ -53,6 +55,8 @@ pub struct AlyaDatabase {
 struct CachedGuild {
     #[allow(dead_code)]
     locale: Option<String>,
+    #[allow(dead_code)]
+    chatbot_locale: Option<String>,
     #[allow(dead_code)]
     prefix: Option<String>,
 }
@@ -109,6 +113,7 @@ impl AlyaDatabase {
             CREATE TABLE IF NOT EXISTS guild (
                 id TEXT PRIMARY KEY,
                 locale TEXT,
+                chatbot_locale TEXT,
                 prefix TEXT,
                 chatbot_channel_id TEXT,
                 global_channel_id TEXT,
@@ -129,11 +134,43 @@ impl AlyaDatabase {
             );
         ";
 
+        const USER_PREFERENCES_SCHEMA: &str = r"
+            CREATE TABLE IF NOT EXISTS user_preferences (
+                user_id TEXT PRIMARY KEY,
+                chatbot_language TEXT,
+                updated_at TEXT DEFAULT (CURRENT_TIMESTAMP)
+            );
+        ";
+
         let conn = self.db.connect()?;
         conn.execute_batch(GUILD_SCHEMA).await?;
         conn.execute_batch(USER_VOTE_SCHEMA).await?;
+        conn.execute_batch(USER_PREFERENCES_SCHEMA).await?;
+
+        self.ensure_optional_columns(&conn).await?;
 
         Ok(())
+    }
+
+    async fn ensure_optional_columns(&self, conn: &libsql::Connection) -> anyhow::Result<()> {
+        self.try_add_column(conn, "ALTER TABLE guild ADD COLUMN chatbot_locale TEXT")
+            .await?;
+
+        Ok(())
+    }
+
+    async fn try_add_column(&self, conn: &libsql::Connection, sql: &str) -> anyhow::Result<()> {
+        match conn.execute(sql, ()).await {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                let err_text = err.to_string().to_lowercase();
+                if err_text.contains("duplicate column name") {
+                    Ok(())
+                } else {
+                    Err(err.into())
+                }
+            }
+        }
     }
 
     fn now_iso() -> String {
@@ -215,6 +252,43 @@ impl AlyaDatabase {
     }
 
     #[allow(dead_code)]
+    pub async fn get_chatbot_locale(&self, guild_id: &str) -> anyhow::Result<String> {
+        let chatbot_locale = self
+            .cache
+            .read()
+            .await
+            .get(guild_id)
+            .and_then(|c| c.chatbot_locale.clone());
+
+        if let Some(chatbot_locale) = chatbot_locale {
+            return Ok(chatbot_locale);
+        }
+
+        let conn = self.db.connect()?;
+        let mut rows = conn
+            .query(
+                "SELECT chatbot_locale FROM guild WHERE id = ?1 LIMIT 1",
+                params![guild_id],
+            )
+            .await?;
+
+        if let Some(row) = rows.next().await? {
+            let chatbot_locale: Option<String> = row.get(0)?;
+            if let Some(chatbot_locale) = chatbot_locale {
+                self.cache
+                    .write()
+                    .await
+                    .entry(guild_id.to_string())
+                    .or_insert_with(Default::default)
+                    .chatbot_locale = Some(chatbot_locale.clone());
+                return Ok(chatbot_locale);
+            }
+        }
+
+        Ok(DEFAULT_CHATBOT_LANGUAGE.to_string())
+    }
+
+    #[allow(dead_code)]
     pub async fn set_locale(&self, guild_id: &str, locale: &str) -> anyhow::Result<()> {
         let sql = "INSERT INTO guild (id, locale, created_at, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET locale = excluded.locale, updated_at = CURRENT_TIMESTAMP";
@@ -251,6 +325,24 @@ impl AlyaDatabase {
     }
 
     #[allow(dead_code)]
+    pub async fn set_chatbot_locale(&self, guild_id: &str, locale: &str) -> anyhow::Result<()> {
+        let sql = "INSERT INTO guild (id, chatbot_locale, created_at, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET chatbot_locale = excluded.chatbot_locale, updated_at = CURRENT_TIMESTAMP";
+
+        let conn = self.db.connect()?;
+        conn.execute(sql, params![guild_id, locale]).await?;
+
+        self.cache
+            .write()
+            .await
+            .entry(guild_id.to_string())
+            .or_insert_with(Default::default)
+            .chatbot_locale = Some(locale.to_string());
+
+        Ok(())
+    }
+
+    #[allow(dead_code)]
     pub async fn delete_prefix(&self, guild_id: &str) -> anyhow::Result<()> {
         let sql = "INSERT INTO guild (id, prefix, created_at, updated_at) VALUES (?1, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET prefix = NULL, updated_at = CURRENT_TIMESTAMP";
@@ -261,6 +353,37 @@ impl AlyaDatabase {
         if let Some(cached) = self.cache.write().await.get_mut(guild_id) {
             cached.prefix = None;
         }
+
+        Ok(())
+    }
+
+    pub async fn get_user_chatbot_language(&self, user_id: &str) -> anyhow::Result<Option<String>> {
+        let conn = self.db.connect()?;
+        let mut rows = conn
+            .query(
+                "SELECT chatbot_language FROM user_preferences WHERE user_id = ?1 LIMIT 1",
+                params![user_id],
+            )
+            .await?;
+
+        if let Some(row) = rows.next().await? {
+            let language: Option<String> = row.get(0)?;
+            return Ok(language);
+        }
+
+        Ok(None)
+    }
+
+    pub async fn set_user_chatbot_language(
+        &self,
+        user_id: &str,
+        language: &str,
+    ) -> anyhow::Result<()> {
+        let sql = "INSERT INTO user_preferences (user_id, chatbot_language, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id) DO UPDATE SET chatbot_language = excluded.chatbot_language, updated_at = CURRENT_TIMESTAMP";
+
+        let conn = self.db.connect()?;
+        conn.execute(sql, params![user_id, language]).await?;
 
         Ok(())
     }
